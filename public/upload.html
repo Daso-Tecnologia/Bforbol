@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload de Boletos - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html" class="active">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <h2>Upload de Boletos</h2>
+        <p class="muted">Selecione os arquivos PDF. O código do fornecedor deve estar nas posições 7 a 16 do nome (ex.: <code>FCOMP-0000000001-0000000001A.PDF</code>).</p>
+
+        <div class="dropzone" id="dropZone" onclick="abrirSeletor()">
+            <div class="dropzone-icon">⬆</div>
+            <p>Arraste e solte os PDFs aqui ou <strong>clique para selecionar</strong></p>
+            <input type="file" id="fileInput" accept=".pdf" multiple hidden>
+        </div>
+
+        <div class="panel" id="fileListPanel" style="display:none;">
+            <h3>Arquivos selecionados</h3>
+            <ul id="fileList" class="file-list"></ul>
+            <div class="actions">
+                <button class="btn" id="btnLimpar">Limpar</button>
+                <button class="btn btn-primary" id="btnUpload">Enviar para o servidor</button>
+            </div>
+        </div>
+
+        <div class="panel" id="resultPanel" style="display:none;">
+            <h3>Resultado do upload</h3>
+            <div id="resultMsg"></div>
+            <div class="actions">
+                <button class="btn btn-primary" id="btnProcessar">Processar (Ler boletos)</button>
+                <button class="btn" id="btnVoltar">Voltar ao início</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+<script>
+        // Exibir erros de JS na tela (para diagnóstico)
+        window.onerror = function (msg, src, line) {
+            const el = document.getElementById('resultMsg');
+            if (el) { el.innerHTML = '<p class="error-msg">Erro JS: ' + msg + ' (linha ' + line + ')</p>'; }
+            return false;
+        };
+
+        // Estado global dos arquivos selecionados
+        let arquivosSelecionados = [];
+        let fileInputG = null;
+        let fileListG = null;
+        let fileListPanelG = null;
+        let resultPanelG = null;
+        let resultMsgG = null;
+
+        window.abrirSeletor = function () {
+            if (fileInputG) fileInputG.click();
+        };
+
+        function adicionarArquivos(lista) {
+            const novos = Array.from(lista).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+            arquivosSelecionados = arquivosSelecionados.concat(novos);
+            renderLista();
+        }
+
+        function renderLista() {
+            if (!fileListG || !fileListPanelG) return;
+            if (arquivosSelecionados.length === 0) {
+                fileListPanelG.style.display = 'none';
+                return;
+            }
+            fileListPanelG.style.display = 'block';
+            fileListG.innerHTML = arquivosSelecionados.map((f, i) => `
+                <li>
+                    <span>📄 ${f.name} <small>(${(f.size / 1024).toFixed(1)} KB)</small></span>
+                    <button class="btn btn-small btn-danger" onclick="removerArquivo(${i})">✕</button>
+                </li>
+            `).join('');
+        }
+
+        window.removerArquivo = (i) => {
+            arquivosSelecionados.splice(i, 1);
+            renderLista();
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try { auth.verificar(); } catch (e) { console.error(e); }
+
+            const dropZone = document.getElementById('dropZone');
+            fileInputG = document.getElementById('fileInput');
+            fileListPanelG = document.getElementById('fileListPanel');
+            fileListG = document.getElementById('fileList');
+            resultPanelG = document.getElementById('resultPanel');
+            resultMsgG = document.getElementById('resultMsg');
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                adicionarArquivos(e.dataTransfer.files);
+            });
+            fileInputG.addEventListener('change', (e) => adicionarArquivos(e.target.files));
+
+            document.getElementById('btnLimpar').addEventListener('click', () => {
+                arquivosSelecionados = [];
+                renderLista();
+            });
+
+            document.getElementById('btnUpload').addEventListener('click', async () => {
+                if (arquivosSelecionados.length === 0) return;
+
+                const formData = new FormData();
+                arquivosSelecionados.forEach(f => formData.append('boletos[]', f));
+
+                const btn = document.getElementById('btnUpload');
+                btn.disabled = true;
+                btn.textContent = 'Enviando...';
+
+                try {
+                    const data = await api.upload('/api/boletos/upload.php', formData);
+                    resultMsgG.innerHTML = `<p class="success-msg">${data.message}</p>`;
+
+                    if (data.erros && data.erros.length > 0) {
+                        resultMsgG.innerHTML += `<ul class="error-list">${data.erros.map(e => `<li>${e}</li>`).join('')}</ul>`;
+                    }
+
+                    resultPanelG.style.display = 'block';
+                    fileListPanelG.style.display = 'none';
+                    arquivosSelecionados = [];
+                    renderLista();
+                } catch (err) {
+                    resultMsgG.innerHTML = `<p class="error-msg">${err.message}</p>`;
+                    resultPanelG.style.display = 'block';
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Enviar para o servidor';
+                }
+            });
+
+            document.getElementById('btnProcessar').addEventListener('click', async () => {
+                const btn = document.getElementById('btnProcessar');
+                btn.disabled = true;
+                btn.textContent = 'Processando...';
+
+                try {
+                    const data = await api.post('/api/boletos/ler.php', {});
+                    resultMsgG.innerHTML = `<p class="success-msg">${data.message}</p>`;
+                    if (data.acima_limite && data.acima_limite.length > 0) {
+                        resultMsgG.innerHTML += `<p class="error-msg"><strong>Fornecedores excedendo o limite de ${data.acima_limite[0].limite_mb} MB:</strong></p><ul class="error-list">${data.acima_limite.map(a => `<li>${a.fornecedor} (${a.cod_for}) — total ${a.total_mb} MB em ${a.total_arquivos} arquivo(s) — envio não criado</li>`).join('')}</ul>`;
+                    }
+                    if (data.nao_wg_ven && data.nao_wg_ven.length > 0) {
+                        resultMsgG.innerHTML += `<p class="muted">Código não encontrado na wg_ven (GATE): ${data.nao_wg_ven.join(', ')}</p>`;
+                    }
+                    if (data.gate_indisponivel && data.gate_indisponivel.length > 0) {
+                        resultMsgG.innerHTML += `<p class="error-msg">GATE (MSSQL) indisponível — arquivos não processados: ${data.gate_indisponivel.join(', ')}</p>`;
+                    }
+                    if (data.sem_email && data.sem_email.length > 0) {
+                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedores sem e-mail principal — filas NÃO criadas. Cadastre o e-mail no fornecedor e execute "Ler boletos" novamente: ${data.sem_email.join(', ')}</p>`;
+                    }
+                    if (data.sem_fornecedor && data.sem_fornecedor.length > 0) {
+                        resultMsgG.innerHTML += `<p class="muted">Sem fornecedor: ${data.sem_fornecedor.join(', ')}</p>`;
+                    }
+                    if (data.nao_ativos && data.nao_ativos.length > 0) {
+                        resultMsgG.innerHTML += `<p class="muted">Não ativos: ${data.nao_ativos.join(', ')}</p>`;
+                    }
+                    setTimeout(() => window.location.href = 'envios.html', 2500);
+                } catch (err) {
+                    resultMsgG.innerHTML = `<p class="error-msg">${err.message}</p>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Processar (Ler boletos)';
+                }
+            });
+
+            document.getElementById('btnVoltar').addEventListener('click', () => {
+                resultPanelG.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>

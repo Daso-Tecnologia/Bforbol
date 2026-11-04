@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuários - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html" class="active">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>Usuários</h2>
+            <button class="btn btn-primary" id="btnNovo" type="button" onclick="abrirModal()">+ Novo Usuário</button>
+        </div>
+
+        <table class="table" id="tblUsuarios">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>E-mail</th>
+                    <th>Nível</th>
+                    <th>Ativo</th>
+                    <th>Criado em</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </main>
+
+    <!-- Modal de edição -->
+    <div class="modal-overlay" id="modalUsuario" style="display:none;">
+        <div class="modal">
+            <h3 id="modalTitulo">Novo Usuário</h3>
+            <form id="formUsuario">
+                <input type="hidden" id="f_id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_nome">Nome</label>
+                        <input type="text" id="f_nome" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="f_email">E-mail</label>
+                        <input type="email" id="f_email" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_senha"><span id="lblSenha">Senha</span> <small id="hintSenha"></small></label>
+                        <div class="password-wrap">
+                            <input type="password" id="f_senha" autocomplete="new-password">
+                            <button type="button" class="password-toggle" id="toggleSenha" onclick="alternarSenha('f_senha','toggleSenha')" title="Mostrar/ocultar senha">👁️</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="f_nivel">Nível</label>
+                        <select id="f_nivel">
+                            <option value="read">Somente leitura</option>
+                            <option value="completo">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_ativo">Ativo</label>
+                        <select id="f_ativo">
+                            <option value="1">Sim</option>
+                            <option value="0">Não</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-note" id="formNote" style="display:none;"></div>
+                <div class="form-error" id="formError" style="display:none;"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" onclick="fecharModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        const modalUsuario = document.getElementById('modalUsuario');
+        const formError = document.getElementById('formError');
+        const formNote = document.getElementById('formNote');
+        const tbody = document.querySelector('#tblUsuarios tbody');
+
+        function alternarSenha(idCampo, idBotao) {
+            const campo = document.getElementById(idCampo);
+            const botao = document.getElementById(idBotao);
+            if (!campo || !botao) return;
+            const mostrar = campo.type === 'password';
+            campo.type = mostrar ? 'text' : 'password';
+            botao.textContent = mostrar ? '🙈' : '👁️';
+            botao.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+        }
+        window.alternarSenha = alternarSenha;
+
+        // Dados do usuário logado
+        let me = null;
+        try {
+            const stored = localStorage.getItem('boleto_usuario');
+            if (stored) me = JSON.parse(stored);
+        } catch (e) { me = null; }
+        const isAdmin = me && me.nivel === 'completo';
+
+        function aplicarCampos(u) {
+            // Desabilitar campos conforme o nível do usuário logado
+            if (!isAdmin) {
+                // Usuário 'read': só nome e senha podem ser alterados
+                document.getElementById('f_email').disabled = true;
+                document.getElementById('f_nivel').disabled = true;
+                document.getElementById('f_ativo').disabled = true;
+                document.getElementById('f_nome').disabled = false;
+                document.getElementById('formNote').textContent = 'Seu acesso é de somente leitura: você pode alterar apenas o próprio nome e a senha. E-mail, nível e status não podem ser alterados. Para usar um novo e-mail, um administrador deve criar um novo registro.';
+                document.getElementById('formNote').style.display = 'block';
+            } else if (u && me && String(me.id) === String(u.id)) {
+                // Admin editando a si mesmo: não pode rebaixar o nível nem desativar a conta
+                document.getElementById('f_nivel').disabled = true;
+                document.getElementById('f_ativo').disabled = true;
+                document.getElementById('f_email').disabled = false;
+                document.getElementById('f_nome').disabled = false;
+                document.getElementById('formNote').style.display = 'none';
+            } else {
+                // Admin editando outro usuário (ou criando): controle total
+                document.getElementById('f_email').disabled = false;
+                document.getElementById('f_nivel').disabled = false;
+                document.getElementById('f_ativo').disabled = false;
+                document.getElementById('f_nome').disabled = false;
+                document.getElementById('formNote').style.display = 'none';
+            }
+        }
+
+        function abrirModal(u = null) {
+            if (!modalUsuario) return;
+            formError.style.display = 'none';
+            document.getElementById('modalTitulo').textContent = u ? 'Editar Usuário' : 'Novo Usuário';
+            document.getElementById('f_id').value = u?.id ?? '';
+            document.getElementById('f_nome').value = u?.nome ?? '';
+            document.getElementById('f_email').value = u?.email ?? '';
+            document.getElementById('f_senha').value = '';
+            document.getElementById('f_nivel').value = u?.nivel ?? 'read';
+            document.getElementById('f_ativo').value = u?.ativo ?? 1;
+            document.getElementById('lblSenha').textContent = u ? 'Nova senha (deixe vazio para manter)' : 'Senha';
+            document.getElementById('f_senha').required = !u;
+            aplicarCampos(u);
+            modalUsuario.style.display = 'flex';
+        }
+        function fecharModal() {
+            if (modalUsuario) modalUsuario.style.display = 'none';
+        }
+        window.abrirModal = abrirModal;
+        window.fecharModal = fecharModal;
+
+        window.editar = (id) => {
+            api.get('/api/usuarios/listar.php').then(data => {
+                const u = (data || []).find(x => String(x.id) === String(id));
+                if (u) abrirModal(u);
+            }).catch(err => alert('Erro: ' + (err.message || err)));
+        };
+
+        window.excluir = async (id) => {
+            if (!confirm('Excluir este usuário?')) return;
+            try {
+                const data = await api.post('/api/usuarios/excluir.php', { id });
+                alert(data.message);
+                carregar();
+            } catch (err) { alert('Erro: ' + (err.message || err)); }
+        };
+
+        async function carregar() {
+            try {
+                const data = await api.get('/api/usuarios/listar.php');
+                const usuarios = Array.isArray(data) ? data : (data.data || []);
+
+                if (usuarios.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = usuarios.map(u => `
+                    <tr>
+                        <td>${u.nome}</td>
+                        <td>${u.email}</td>
+                        <td>${u.nivel === 'completo' ? '<span class="badge badge-enviado">Admin</span>' : '<span class="badge">Leitura</span>'}</td>
+                        <td>${u.ativo ? '<span class="badge badge-enviado">Sim</span>' : '<span class="badge badge-erro">Não</span>'}</td>
+                        <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '-'}</td>
+                        <td>
+                            <button class="btn btn-small" onclick="editar(${u.id})">Editar</button>
+                            ${isAdmin ? `<button class="btn btn-small btn-danger" onclick="excluir(${u.id})">Excluir</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="6">' + (err.message || err) + '</td></tr>';
+            }
+        }
+        window.carregar = carregar;
+
+        document.getElementById('formUsuario').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            formError.style.display = 'none';
+
+            const payload = {
+                id: document.getElementById('f_id').value || null,
+                nome: document.getElementById('f_nome').value,
+            };
+
+            // Apenas administrador pode enviar email/nivel/ativo
+            if (isAdmin) {
+                payload.email = document.getElementById('f_email').value;
+                payload.nivel = document.getElementById('f_nivel').value;
+                payload.ativo = document.getElementById('f_ativo').value;
+            }
+
+            const senha = document.getElementById('f_senha').value;
+            if (senha) payload.senha = senha;
+
+            try {
+                const data = await api.post('/api/usuarios/salvar.php', payload);
+                alert(data.message);
+                fecharModal();
+                carregar();
+            } catch (err) {
+                formError.textContent = err.message;
+                formError.style.display = 'block';
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try { auth.verificar(); } catch (e) { console.error(e); }
+
+            // Somente administrador vê o botão "Novo Usuário"
+            const btnNovo = document.getElementById('btnNovo');
+            if (btnNovo) btnNovo.style.display = isAdmin ? 'inline-block' : 'none';
+
+            carregar();
+        });
+    </script>
+</body>
+</html>

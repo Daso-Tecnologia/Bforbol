@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sobre - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html" class="active">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>Sobre o Sistema</h2>
+        </div>
+
+        <div class="panel">
+            <h3>O que é?</h3>
+            <p>O <strong>Sistema de Envio de Boletos</strong> é uma ferramenta da <strong>Sua Empresa Viagens e Turismo</strong> que gerencia o envio de boletos e documentos de pagamento de comissão aos fornecedores, por e-mail, de forma organizada e auditada.</p>
+        </div>
+
+        <div class="panel">
+            <h3>Como funciona?</h3>
+            <ol>
+                <li><strong>Upload de Boletos:</strong> o usuário envia os arquivos (PDF e outros formatos permitidos) pela tela <em>Upload de Boletos</em>. O nome do arquivo deve conter o código do fornecedor nas posições 7 a 16 (ex.: <code>FCOMP-0000000001-....PDF</code>).</li>
+                <li><strong>Fornecedores:</strong> o sistema identifica (ou cadastra) o fornecedor responsável pelo arquivo, mantém seus e-mails atualizados e permite o envio dos boletos de cada fornecedor de forma individual, com botão que se desabilita quando não há nada pendente.</li>
+                <li><strong>Envio:</strong> o e-mail é disparado com a mensagem principal padrão (arquivo <em>boleto.html</em> do site) acompanhada dos anexos em PDF. Cada envio fica registrado no histórico.</li>
+                <li><strong>Envios:</strong> a tela <em>Envios</em> mostra o que foi enviado, o que está pendente e o que falhou, com opção de reenviar falhas.</li>
+                <li><strong>Relatórios:</strong> exportação do histórico de envios em PDF, Excel (XLSX) ou CSV.</li>
+                <li><strong>Usuários:</strong> controle de acesso. Administradores gerenciam todos os usuários; usuários comuns veem e editam apenas o próprio registro.</li>
+            </ol>
+        </div>
+
+        <div class="panel">
+            <h3>Regras importantes</h3>
+            <ul>
+                <li>Os boletos (documentos) são a origem de tudo: os fornecedores são cadastrados automaticamente a partir dos arquivos enviados.</li>
+                <li>Vários documentos podem ser enviados a um mesmo fornecedor, para todos os e-mails cadastrados dele.</li>
+                <li>Após o envio bem-sucedido, os arquivos são movidos para a pasta "enviado", evitando duplicidade.</li>
+                <li>Envios duplicados são alertados antes de acontecer, deixando a decisão com o usuário.</li>
+            </ul>
+        </div>
+
+        <div class="panel">
+            <h3>Teste e configuração</h3>
+            <ul>
+                <li><strong>Testar E-mail:</strong> envia um e-mail de teste com um PDF fictício em anexo, para validar o funcionamento do SMTP.</li>
+                <li><strong>Config. E-mail:</strong> (somente administradores) permite ajustar as configurações de SMTP (servidor, porta, usuário e senha) diretamente pelo sistema.</li>
+            </ul>
+        </div>
+
+        <div class="panel">
+            <h3>Suporte</h3>
+            <p>Em caso de dúvidas, procure o responsável pelo sistema ou a equipe de TI da Sua Empresa.</p>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            try { auth.verificar(); } catch (e) { console.error(e); }
+        });
+    </script>
+</body>
+</html>

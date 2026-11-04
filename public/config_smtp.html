@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config. E-mail - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="active admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>Configuração de E-mail (SMTP)</h2>
+        </div>
+
+        <div id="blocoNegado" class="panel" style="display:none;">
+            <div class="error-msg">Acesso negado. Apenas administradores podem alterar as configurações de SMTP.</div>
+        </div>
+
+        <div id="blocoForm" class="panel" style="display:none;">
+            <h3>Servidor SMTP</h3>
+            <p class="muted">Essas configurações são gravadas no arquivo <code>.env</code> do sistema (apenas as opções de SMTP). Para salvar, confirme com sua senha.</p>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="smtpHost">Servidor (host)</label>
+                    <input type="text" id="smtpHost" placeholder="smtp.exemplo.com">
+                </div>
+                <div class="form-group">
+                    <label for="smtpPort">Porta</label>
+                    <input type="number" id="smtpPort" placeholder="587" min="1" max="65535">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="smtpSecure">Segurança</label>
+                    <select id="smtpSecure">
+                        <option value="tls">TLS (STARTTLS - porta 587)</option>
+                        <option value="ssl">SSL (porta 465)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="smtpUser">Usuário</label>
+                    <input type="text" id="smtpUser" placeholder="conta@smtp.exemplo.com" autocomplete="off">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="smtpPass">Senha SMTP <small id="hintPass"></small></label>
+                    <div class="password-wrap">
+                        <input type="password" id="smtpPass" autocomplete="new-password">
+                        <button type="button" class="password-toggle" id="togglePass" onclick="alternarSenha('smtpPass','togglePass')" title="Mostrar/ocultar senha">👁️</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="smtpTimeout">Timeout (segundos)</label>
+                    <input type="number" id="smtpTimeout" min="1" max="600" placeholder="20">
+                </div>
+                <div class="form-group">
+                    <label for="workerIntervalo">Intervalo entre envios (s)</label>
+                    <input type="number" id="workerIntervalo" min="0" max="120" placeholder="5">
+                    <div class="form-note">Pausa entre cada e-mail enviado em lote (evita sobrecarregar o provedor). 0 = sem pausa.</div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="envioEmailCopia">Cópia fixa (CC_FIXO) nos envios</label>
+                    <select id="envioEmailCopia">
+                        <option value="true">Sim</option>
+                        <option value="false">Não</option>
+                    </select>
+                </div>
+            </div>
+
+            <h3 style="margin-top:20px;">Upload de arquivos</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="allowedExtensions">Extensões permitidas no upload</label>
+                    <input type="text" id="allowedExtensions" placeholder="pdf,xlsx,xls,docx,doc,csv">
+                    <div class="form-note">
+                        Lista de extensões aceitas na tela <strong>Upload de Boletos</strong>, separadas por vírgula
+                        e <strong>sem pontos</strong>. Ex.: <code>pdf,xlsx,xls,docx,doc,csv</code>.
+                        O sistema envia junto ao e-mail <em>todos</em> os arquivos do fornecedor (boleto + notas fiscais
+                        + outros documentos) que tenham uma dessas extensões. Se as suas notas vierem em outro formato
+                        (ex.: planilha Excel), acrescente a extensão aqui. Apenas arquivos com essas extensões são aceitos.
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="margin-top:20px;">Remetente</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="smtpFrom">E-mail de remetente</label>
+                    <input type="email" id="smtpFrom" placeholder="contato@exemplo.com.br">
+                </div>
+                <div class="form-group">
+                    <label for="smtpFromName">Nome do remetente</label>
+                    <input type="text" id="smtpFromName" placeholder="Sua Empresa">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="ccFixo">Cópia fixa (e-mail adicional)</label>
+                    <input type="email" id="ccFixo" placeholder="contato@exemplo.com.br">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="senhaConfirmacao">Sua senha de acesso ao sistema (a do login) <small>(não é a senha do SMTP)</small></label>
+                    <div class="password-wrap">
+                        <input type="password" id="senhaConfirmacao" autocomplete="current-password" required>
+                        <button type="button" class="password-toggle" id="toggleConf" onclick="alternarSenha('senhaConfirmacao','toggleConf')" title="Mostrar/ocultar senha">👁️</button>
+                    </div>
+                    <div class="form-note" id="confirmaUsuario"></div>
+                </div>
+            </div>
+
+            <div class="form-error" id="formError" style="display:none;"></div>
+            <div class="success-msg" id="successMsg" style="display:none;"></div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="btnSalvar" type="button" onclick="salvar()">💾 Salvar configurações</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Observações</h3>
+            <ul>
+                <li>As novas configurações passam a valer a partir do <strong>próximo envio</strong>.</li>
+                <li>Outras variáveis do <code>.env</code> (banco de dados, MSSQL/GATE, JWT etc.) não são alteradas por esta tela.</li>
+                <li>Depois de alterar, use a opção <em>Testar E-mail</em> para confirmar que o envio está funcionando.</li>
+            </ul>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        const blocoNegado = document.getElementById('blocoNegado');
+        const blocoForm = document.getElementById('blocoForm');
+        const formError = document.getElementById('formError');
+        const successMsg = document.getElementById('successMsg');
+        const btnSalvar = document.getElementById('btnSalvar');
+
+        let me = null;
+        try { me = JSON.parse(localStorage.getItem('boleto_usuario')); } catch (e) { me = null; }
+        const isAdmin = me && me.nivel === 'completo';
+
+        function preencherConfirmaUsuario() {
+            const el = document.getElementById('confirmaUsuario');
+            if (!el) return;
+            if (me && me.nome) {
+                el.textContent = 'Digite a senha de login do usuário "' + me.nome + '" (' + me.email + ').';
+            } else {
+                el.textContent = 'Digite a senha de login do usuário atualmente logado no sistema.';
+            }
+        }
+
+        function alternarSenha(idCampo, idBotao) {
+            const campo = document.getElementById(idCampo);
+            const botao = document.getElementById(idBotao);
+            if (!campo || !botao) return;
+            const mostrar = campo.type === 'password';
+            campo.type = mostrar ? 'text' : 'password';
+            botao.textContent = mostrar ? '🙈' : '👁️';
+            botao.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+        }
+        window.alternarSenha = alternarSenha;
+
+        async function carregar() {
+            try {
+                const data = await api.get('/api/configuracao/smtp_listar.php');
+
+                document.getElementById('smtpHost').value = data.smtp_host || '';
+                document.getElementById('smtpPort').value = data.smtp_port || '';
+                document.getElementById('smtpSecure').value = data.smtp_secure === 'ssl' ? 'ssl' : 'tls';
+                document.getElementById('smtpUser').value = data.smtp_user || '';
+                document.getElementById('smtpTimeout').value = data.smtp_timeout || '';
+                document.getElementById('workerIntervalo').value = data.worker_intervalo_segundos || '5';
+                document.getElementById('smtpFrom').value = data.smtp_from || '';
+                document.getElementById('smtpFromName').value = data.smtp_from_name || '';
+                document.getElementById('ccFixo').value = data.cc_fixo || '';
+                document.getElementById('envioEmailCopia').value = data.envio_email_copia === 'false' ? 'false' : 'true';
+                document.getElementById('allowedExtensions').value = data.allowed_extensions || 'pdf';
+                document.getElementById('hintPass').textContent = data.smtp_pass_configurada
+                    ? '(deixe vazio para manter a senha atual)'
+                    : '(ainda não configurada)';
+            } catch (err) {
+                formError.textContent = err.message || err;
+                formError.style.display = 'block';
+            }
+        }
+
+        async function salvar() {
+            formError.style.display = 'none';
+            successMsg.style.display = 'none';
+
+            const senhaConfirmacao = document.getElementById('senhaConfirmacao').value;
+            if (!senhaConfirmacao) {
+                formError.textContent = 'Informe sua senha para confirmar a alteração.';
+                formError.style.display = 'block';
+                return;
+            }
+
+            btnSalvar.disabled = true;
+            btnSalvar.textContent = 'Salvando...';
+
+            try {
+                const data = await api.post('/api/configuracao/smtp_salvar.php', {
+                    smtp_host: document.getElementById('smtpHost').value.trim(),
+                    smtp_port: document.getElementById('smtpPort').value.trim(),
+                    smtp_secure: document.getElementById('smtpSecure').value,
+                    smtp_user: document.getElementById('smtpUser').value.trim(),
+                    smtp_timeout: document.getElementById('smtpTimeout').value.trim(),
+                    worker_intervalo_segundos: document.getElementById('workerIntervalo').value.trim(),
+                    smtp_pass: document.getElementById('smtpPass').value,
+                    smtp_from: document.getElementById('smtpFrom').value.trim(),
+                    smtp_from_name: document.getElementById('smtpFromName').value.trim(),
+                    cc_fixo: document.getElementById('ccFixo').value.trim(),
+                    envio_email_copia: document.getElementById('envioEmailCopia').value,
+                    allowed_extensions: document.getElementById('allowedExtensions').value.trim(),
+                    senha_confirmacao: senhaConfirmacao,
+                });
+
+                successMsg.textContent = data.message || 'Configurações salvas com sucesso.';
+                successMsg.style.display = 'block';
+
+                document.getElementById('smtpPass').value = '';
+                document.getElementById('senhaConfirmacao').value = '';
+                document.getElementById('hintPass').textContent = '(deixe vazio para manter a senha atual)';
+
+                carregar();
+            } catch (err) {
+                formError.textContent = (err.data && err.data.error) || err.message || 'Falha ao salvar.';
+                formError.style.display = 'block';
+            } finally {
+                btnSalvar.disabled = false;
+                btnSalvar.textContent = '💾 Salvar configurações';
+            }
+        }
+        window.salvar = salvar;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try { auth.verificar(); } catch (e) { console.error(e); }
+
+            if (!isAdmin) {
+                blocoNegado.style.display = 'block';
+                return;
+            }
+
+            blocoForm.style.display = 'block';
+            preencherConfirmaUsuario();
+            carregar();
+        });
+    </script>
+</body>
+</html>

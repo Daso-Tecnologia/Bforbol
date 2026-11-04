@@ -1,0 +1,12 @@
+vendor/
+.env
+.env.*
+!.env.example
+storage/
+*.log
+*.bak
+*.sql.gz
+*.csv
+*.zip
+*.pdf
+*.PDF

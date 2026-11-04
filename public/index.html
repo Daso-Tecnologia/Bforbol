@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html" class="active">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <h2>Visão Geral</h2>
+
+        <div class="cards">
+            <div class="card">
+                <div class="card-title">Pendentes</div>
+                <div class="card-value" id="cardPendentes">-</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Enviados</div>
+                <div class="card-value" id="cardEnviados">-</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Erros</div>
+                <div class="card-value" id="cardErros">-</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Fornecedores</div>
+                <div class="card-value" id="cardFornecedores">-</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Ações rápidas</h3>
+            <div class="quick-actions">
+                <a href="upload.html" class="btn btn-primary">⬆ Upload de Boletos</a>
+                <button class="btn btn-primary" id="btnEnviarTodos">📨 Enviar pendentes</button>
+                <a href="envios.html?estado=pendente" class="btn">Ver pendentes</a>
+                <a href="envios.html?estado=erro" class="btn btn-warning">Ver falhas / reenviar</a>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Últimos envios</h3>
+            <table class="table" id="tblUltimos">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Código</th>
+                        <th>Fornecedor</th>
+                        <th>Destino</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            auth.verificar();
+
+            const btnEnviar = document.getElementById('btnEnviarTodos');
+            if (btnEnviar) {
+                btnEnviar.addEventListener('click', async () => {
+                    if (btnEnviar.disabled) return;
+                    btnEnviar.disabled = true;
+                    const textoOriginal = btnEnviar.textContent;
+                    btnEnviar.textContent = 'Enviando...';
+                    try {
+                        const data = await api.post('/api/envios/enviar_todos.php', {});
+                        alert(data.message);
+                        location.reload();
+                    } catch (err) {
+                        alert('Falha ao enviar pendentes: ' + err.message);
+                        btnEnviar.disabled = false;
+                        btnEnviar.textContent = textoOriginal;
+                    }
+                });
+            }
+
+            try {
+                const [envios, fornecedores] = await Promise.all([
+                    api.get('/api/envios/listar.php?por_pagina=1'),
+                    api.get('/api/fornecedores/listar.php?por_pagina=1'),
+                ]);
+
+                document.getElementById('cardPendentes').textContent = envios.resumo?.pendente ?? 0;
+                document.getElementById('cardEnviados').textContent = envios.resumo?.enviado ?? 0;
+                document.getElementById('cardErros').textContent = envios.resumo?.erro ?? 0;
+                document.getElementById('cardFornecedores').textContent = fornecedores.total_registros ?? 0;
+
+                // Últimos 8 envios
+                const recentes = await api.get('/api/envios/listar.php?por_pagina=8');
+                const tbody = document.querySelector('#tblUltimos tbody');
+
+                if (recentes.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">Nenhum envio registrado.</td></tr>';
+                } else {
+                    tbody.innerHTML = recentes.data.map(e => `
+                        <tr>
+                            <td>${new Date(e.data_tentativa || e.created_at).toLocaleString('pt-BR')}</td>
+                            <td>${e.cod_for || '-'}</td>
+                            <td>${e.fan_for || '-'}</td>
+                            <td>${e.destino || '-'}</td>
+                            <td><span class="badge badge-${e.estado}">${e.estado}</span></td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error(err);
+                auth.sair();
+            }
+        });
+    </script>
+</body>
+</html>

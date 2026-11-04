@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envios - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html" class="active">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>Envios</h2>
+            <a href="relatorios.html" class="btn">📊 Relatórios</a>
+        </div>
+
+        <div class="toolbar">
+            <select id="filtroEstado">
+                <option value="">Todos os estados</option>
+                <option value="pendente">Pendentes</option>
+                <option value="enviado">Enviados</option>
+                <option value="erro">Erros</option>
+            </select>
+            <input type="date" id="dataInicial">
+            <input type="date" id="dataFinal">
+            <input type="text" id="busca" placeholder="Buscar...">
+            <button class="btn btn-primary" id="btnFiltrar">Filtrar</button>
+            <button class="btn btn-warning" id="btnReenviarLote" disabled>↻ Reenviar selecionados</button>
+            <button class="btn btn-primary" id="btnEnviarTodos">📨 Enviar pendentes</button>
+            <button class="btn" id="btnProcessar">▶ Processar fila (Ler boletos)</button>
+            <button class="btn btn-danger admin-only" id="btnLimpiarErrores" title="Apaga registros com estado erro (envios_log + log_upload)">🗑 Limpar erros</button>
+            <button class="btn btn-danger admin-only" id="btnLimparPendentes" title="Apaga todas as filas pendentes (conserva os PDFs)">🗑 Limpar Pendentes</button>
+            <button class="btn btn-danger admin-only" id="btnResetCompleto" title="Reset total: apaga pendentes+erros e os PDFs de storage (re-upload do zero)">♻ Reset completo</button>
+        </div>
+
+        <div class="cards cards-sm">
+            <div class="card"><div class="card-title">Pendentes</div><div class="card-value" id="cPend">-</div></div>
+            <div class="card"><div class="card-title">Enviados</div><div class="card-value" id="cEnv">-</div></div>
+            <div class="card"><div class="card-title">Erros</div><div class="card-value" id="cErr">-</div></div>
+        </div>
+
+        <table class="table" id="tblEnvios">
+            <thead>
+                <tr>
+                    <th class="col-check"><input type="checkbox" id="chkTodos" title="Selecionar todos"></th>
+                    <th>ID</th>
+                    <th>Data</th>
+                    <th>Código</th>
+                    <th>Fornecedor</th>
+                    <th>Destino</th>
+                    <th>Assunto</th>
+                    <th>Estado</th>
+                    <th>Mensagem</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="pagination" id="paginacao"></div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            auth.verificar();
+
+            let pagina = 1;
+            const tbody = document.querySelector('#tblEnvios tbody');
+
+            // Preset do filtro via query string (ex.: ?estado=erro)
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('estado')) {
+                document.getElementById('filtroEstado').value = params.get('estado');
+            }
+
+            async function carregar() {
+                const qs = new URLSearchParams({
+                    pagina,
+                    por_pagina: 20,
+                    estado: document.getElementById('filtroEstado').value,
+                    data_inicial: document.getElementById('dataInicial').value,
+                    data_final: document.getElementById('dataFinal').value,
+                    busca: document.getElementById('busca').value.trim(),
+                });
+
+                const data = await api.get('/api/envios/listar.php?' + qs);
+
+                document.getElementById('cPend').textContent = data.resumo?.pendente ?? 0;
+                document.getElementById('cEnv').textContent = data.resumo?.enviado ?? 0;
+                document.getElementById('cErr').textContent = data.resumo?.erro ?? 0;
+
+                if (data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10">Nenhum envio encontrado.</td></tr>';
+                } else {
+                    tbody.innerHTML = data.data.map(e => `
+                        <tr class="${e.estado === 'erro' ? 'row-erro' : ''}">
+                            <td class="col-check">
+                                <input type="checkbox" class="chk-reenvio" value="${e.id}" ${e.estado === 'erro' ? '' : 'disabled'}>
+                            </td>
+                            <td>${e.id}</td>
+                            <td>${new Date(e.data_tentativa || e.created_at).toLocaleString('pt-BR')}</td>
+                            <td>${e.cod_for || '-'}</td>
+                            <td>${e.fan_for || '-'}</td>
+                            <td>${e.destino || '-'}</td>
+                            <td class="col-assunto">${e.assunto || '-'}</td>
+                            <td><span class="badge badge-${e.estado}">${e.estado}</span></td>
+                            <td class="col-msg">${e.mensagem_erro || '-'}</td>
+                            <td>
+                                ${e.estado === 'erro' ? `<button class="btn btn-small btn-warning" onclick="reenviar(${e.id})">Reenviar</button>` : ''}
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+                const pag = document.getElementById('paginacao');
+                pag.innerHTML = '';
+                if (data.total_paginas > 1) {
+                    for (let i = 1; i <= data.total_paginas; i++) {
+                        const b = document.createElement('button');
+                        b.className = 'btn btn-small' + (i === pagina ? ' btn-primary' : '');
+                        b.textContent = i;
+                        b.addEventListener('click', () => { pagina = i; carregar(); });
+                        pag.appendChild(b);
+                    }
+                }
+            }
+
+            window.reenviar = async (id) => {
+                if (!confirm('Reenviar este boleto?')) return;
+                try {
+                    const data = await api.post('/api/boletos/reenviar.php', { id });
+                    alert(data.message);
+                    carregar();
+                } catch (err) {
+                    alert(err.message);
+                }
+            };
+
+            function atualizarBtnLote() {
+                const marcados = document.querySelectorAll('.chk-reenvio:not(:disabled):checked');
+                document.getElementById('btnReenviarLote').disabled = marcados.length === 0;
+            }
+
+            window.reenviarLote = async () => {
+                const marcados = Array.from(document.querySelectorAll('.chk-reenvio:not(:disabled):checked')).map(cb => parseInt(cb.value, 10));
+                if (marcados.length === 0) {
+                    alert('Selecione ao menos um envio com erro.');
+                    return;
+                }
+                if (!confirm('Reenviar ' + marcados.length + ' envio(s) com erro?')) return;
+
+                const btn = document.getElementById('btnReenviarLote');
+                btn.disabled = true;
+                btn.textContent = 'Reenviando...';
+                try {
+                    const data = await api.post('/api/boletos/reenviar_lote.php', { ids: marcados });
+                    let msg = data.message;
+                    if (data.resultados) {
+                        const falhas = data.resultados.filter(r => !r.ok);
+                        if (falhas.length) {
+                            msg += '\n\nFalhas:\n' + falhas.map(r => '  #' + r.id + ': ' + r.mensagem).join('\n');
+                        }
+                    }
+                    alert(msg);
+                    carregar();
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '↻ Reenviar selecionados';
+                }
+            };
+
+            document.getElementById('btnReenviarLote').addEventListener('click', window.reenviarLote);
+
+            document.getElementById('chkTodos').addEventListener('change', (e) => {
+                document.querySelectorAll('.chk-reenvio:not(:disabled)').forEach(cb => { cb.checked = e.target.checked; });
+                atualizarBtnLote();
+            });
+
+            document.getElementById('tblEnvios').addEventListener('change', (e) => {
+                if (e.target.classList.contains('chk-reenvio')) atualizarBtnLote();
+            });
+
+            document.getElementById('btnFiltrar').addEventListener('click', () => {
+                pagina = 1;
+                carregar();
+            });
+
+            document.getElementById('btnProcessar').addEventListener('click', async () => {
+                const btn = document.getElementById('btnProcessar');
+                btn.disabled = true;
+                btn.textContent = 'Processando...';
+                try {
+                    const data = await api.post('/api/boletos/ler.php', {});
+                    alert(data.message);
+                    carregar();
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '▶ Processar fila (Ler boletos)';
+                }
+            });
+
+            document.getElementById('btnEnviarTodos').addEventListener('click', async () => {
+                const btn = document.getElementById('btnEnviarTodos');
+                btn.disabled = true;
+                btn.textContent = 'Enviando...';
+                try {
+                    const data = await api.post('/api/envios/enviar_todos.php', {});
+                    alert(data.message);
+                    carregar();
+                } catch (err) {
+                    alert('Falha ao enviar pendentes: ' + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '📨 Enviar pendentes';
+                }
+            });
+
+            // --- Limpeza (somente administradores) ---------------------------------
+            async function limpiar(accion, mensajeConfirmacion) {
+                if (!confirm(mensajeConfirmacion)) return;
+                try {
+                    const data = await api.post('/api/envios/limpiar.php', { accion });
+                    alert(data.message);
+                    carregar();
+                } catch (err) {
+                    alert(err.message);
+                }
+            }
+
+            document.getElementById('btnLimpiarErrores').addEventListener('click', () =>
+                limpiar('errores', 'Apagar todos os registros com estado ERRO (envios_log + log_upload)?\n\nO histórico de enviados é conservado.')
+            );
+
+            document.getElementById('btnLimparPendentes').addEventListener('click', () =>
+                limpiar('pendientes', 'Apagar TODOS os registros PENDENTES (envios_log + log_upload)?\n\nOs PDFs em storage são conservados.')
+            );
+
+            document.getElementById('btnResetCompleto').addEventListener('click', () =>
+                limpiar('reset_completo', 'RESET COMPLETO:\n\n- Apaga pendentes + erros (envios_log, log_upload)\n- Apaga TODOS os PDFs de storage/boleto/* e storage/enviar/*\n\nPermite re-subir os boletos do zero.\n\n⚠ Esta ação é destrutiva (apaga PDFs do disco). Continuar?')
+            );
+
+            carregar();
+        });
+    </script>
+</body>
+</html>

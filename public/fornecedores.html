@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fornecedores - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html" class="active">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="#" id="btnRelatorios">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>Fornecedores</h2>
+            <button class="btn btn-primary" id="btnNovo" type="button" onclick="abrirModal()">+ Novo Fornecedor</button>
+        </div>
+
+        <div class="toolbar">
+            <div class="search-group">
+                <input type="text" id="busca" placeholder="Buscar por código, nome ou e-mail...">
+                <button class="btn btn-search" id="btnBuscar" type="button" title="Pesquisar">🔍</button>
+            </div>
+            <label class="checkbox"><input type="checkbox" id="apenasAtivos" checked> Apenas ativos</label>
+            <button class="btn" id="btnExportCsv" type="button" title="Exportar fornecedores para CSV">⬇ CSV</button>
+            <button class="btn" id="btnExportXlsx" type="button" title="Exportar fornecedores para Excel">⬇ Excel</button>
+        </div>
+
+        <table class="table" id="tblFornecedores">
+            <thead>
+                <tr>
+                    <th class="sortable" data-ordem="cod_for">Código <span class="sort-ind"></span></th>
+                    <th class="sortable" data-ordem="fan_for">Nome Fantasia <span class="sort-ind"></span></th>
+                    <th class="sortable" data-ordem="raz_for">Razão Social <span class="sort-ind"></span></th>
+                    <th class="sortable" data-ordem="email_for">E-mail <span class="sort-ind"></span></th>
+                    <th>Boletos</th>
+                    <th>Ativo</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="pagination" id="paginacao"></div>
+    </main>
+
+    <!-- Modal de edição -->
+    <div class="modal-overlay" id="modalFornecedor" style="display:none;">
+        <div class="modal">
+            <h3 id="modalTitulo">Novo Fornecedor</h3>
+            <form id="formFornecedor" autocomplete="off">
+                <input type="hidden" id="f_id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_cod_for">Código (10 dígitos — validado no repositório GATE)</label>
+                        <input type="text" id="f_cod_for" maxlength="10" placeholder="Digite o código" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="f_ativo">Ativo</label>
+                        <select id="f_ativo">
+                            <option value="1">Sim</option>
+                            <option value="0">Não</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_fan_for">Nome Fantasia</label>
+                        <input type="text" id="f_fan_for" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="f_raz_for">Razão Social</label>
+                        <input type="text" id="f_raz_for">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_email_for">E-mail principal (Para)</label>
+                        <input type="email" id="f_email_for" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_email_for_2">E-mail 2 (CC)</label>
+                        <input type="email" id="f_email_for_2" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="f_email_for_3">E-mail 3 (CC)</label>
+                        <input type="email" id="f_email_for_3" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_email_for_4">E-mail 4 (CC)</label>
+                        <input type="email" id="f_email_for_4" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="f_email_for_5">E-mail 5 (CC)</label>
+                        <input type="email" id="f_email_for_5" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="f_email_for_6">E-mail 6 (CC)</label>
+                        <input type="email" id="f_email_for_6" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="form-error" id="formError" style="display:none;"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" id="btnCancelar" onclick="fecharModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        // Exibir erros de JS na tela (para diagnosticar no host)
+        window.onerror = function (msg, src, line) {
+            const d = document.getElementById('formError');
+            if (d) { d.textContent = 'Erro JS: ' + msg + ' (linha ' + line + ')'; d.style.display = 'block'; }
+            return false;
+        };
+
+        // Modal (funções globais para funcionar mesmo se o DOMContentLoaded falhar)
+        const modalFornecedor = document.getElementById('modalFornecedor');
+        function abrirModal(f = null) {
+            if (!modalFornecedor) return;
+            document.getElementById('formError').style.display = 'none';
+            document.getElementById('modalTitulo').textContent = f ? 'Editar Fornecedor' : 'Novo Fornecedor';
+            document.getElementById('f_id').value = f?.id ?? '';
+            document.getElementById('f_cod_for').value = f?.cod_for ?? '';
+            document.getElementById('f_fan_for').value = f?.fan_for ?? '';
+            document.getElementById('f_raz_for').value = f?.raz_for ?? '';
+            document.getElementById('f_ativo').value = f?.ativo ?? 1;
+            ['email_for','email_for_2','email_for_3','email_for_4','email_for_5','email_for_6'].forEach(c => {
+                document.getElementById('f_' + c).value = f?.[c] ?? '';
+            });
+            modalFornecedor.style.display = 'flex';
+        }
+        function fecharModal() {
+            if (modalFornecedor) modalFornecedor.style.display = 'none';
+        }
+        window.abrirModal = abrirModal;
+
+        // Auto-preenchimento: ao informar o código (10 dígitos), busca no GATE
+        // e preenche automaticamente Nome Fantasia e Razão Social..
+        window.buscarPorCodigo = async (cod) => {
+            cod = (cod || '').replace(/\D/g, '');
+            if (cod.length !== 10) return null;
+
+            try {
+                const r = await api.get('/api/fornecedores/listar.php?cod_for=' + cod);
+                return r.data || null;
+            } catch (err) {
+                if (err.status !== 404) throw err;
+                return null;
+            }
+        };
+
+        const inputCodFor = document.getElementById('f_cod_for');
+        if (inputCodFor) {
+            inputCodFor.addEventListener('blur', async () => {
+                const cod = inputCodFor.value.replace(/\D/g, '');
+                if (cod.length !== 10) return;
+
+                const f = await window.buscarPorCodigo(cod);
+                if (f) {
+                    const elFan = document.getElementById('f_fan_for');
+                    const elRaz = document.getElementById('f_raz_for');
+                    const elEmail = document.getElementById('f_email_for');
+                    if (elFan && !elFan.value.trim()) elFan.value = f.fan_for || '';
+                    if (elRaz && !elRaz.value.trim()) elRaz.value = f.raz_for || '';
+                    if (elEmail && !elEmail.value.trim()) elEmail.value = f.email_for || '';
+                }
+            });
+        }
+
+window.editar = async (id) => {
+            try {
+                const data = await api.get('/api/fornecedores/listar.php?id=' + id);
+                if (data.data) abrirModal(data.data);
+            } catch (err) { alert('Erro: ' + (err.message || err)); }
+        };
+
+        window.excluir = async (id) => {
+            if (!confirm('Excluir este fornecedor?')) return;
+            try {
+                const data = await api.post('/api/fornecedores/excluir.php', { id });
+                alert(data.message);
+                carregar();
+            } catch (err) { alert('Erro: ' + (err.message || err)); }
+        };
+
+        window.enviarBoletos = async (id) => {
+            let forcar = 0;
+            try {
+                const checked = await api.post('/api/boletos/enviar_fornecedor.php', { fornecedor_id: id, forcar: 0 });
+                if (checked.success) {
+                    alert(checked.message);
+                    carregar();
+                    return;
+                }
+                if (checked.precisa_confirmacao) {
+                    if (!confirm(checked.message + '\n\nEnviar mesmo assim?')) return;
+                    forcar = 1;
+                } else {
+                    alert(checked.message || 'Falha no envio');
+                    return;
+                }
+            } catch (err) {
+                alert(err.message);
+                return;
+            }
+
+            try {
+                const data = await api.post('/api/boletos/enviar_fornecedor.php', { fornecedor_id: id, forcar });
+                alert(data.message);
+            } catch (err) {
+                alert(err.message);
+            }
+            carregar();
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try { auth.verificar(); } catch (e) { console.error(e); }
+
+            let pagina = 1;
+            let busca = '';
+            let apenasAtivos = true;
+            let ordem = 'fan_for';
+            let direcao = 'ASC';
+
+            const tbody = document.querySelector('#tblFornecedores tbody');
+
+            async function carregar() {
+                const qs = new URLSearchParams({ pagina, busca, apenas_ativos: apenasAtivos, ordem, direcao });
+                const data = await api.get('/api/fornecedores/listar.php?' + qs);
+
+                if (data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7">Nenhum fornecedor encontrado.</td></tr>';
+                } else {
+                    tbody.innerHTML = data.data.map(f => `
+                        <tr>
+                            <td>${f.cod_for}</td>
+                            <td>${f.fan_for}</td>
+                            <td>${f.raz_for || '-'}</td>
+                            <td>${f.email_for || '-'}</td>
+                            <td>
+                                ${(f.boletos_pendentes || 0) > 0
+                                    ? `<span class="badge badge-pendente">${f.boletos_pendentes} pend.</span>${(f.boletos_enviados || 0) > 0 ? ` <span class="badge badge-enviado">${f.boletos_enviados} env.</span>` : ''}`
+                                    : (f.boletos_enviados || 0) > 0
+                                        ? `<span class="badge badge-enviado">${f.boletos_enviados} env.</span>`
+                                        : '<span class="badge">vazio</span>'}
+                            </td>
+                            <td>${f.ativo ? '<span class="badge badge-enviado">Sim</span>' : '<span class="badge badge-erro">Não</span>'}</td>
+                            <td>
+                                <button class="btn btn-small" onclick="enviarBoletos(${f.id})" ${!f.ativo || (f.boletos_pendentes || 0) === 0 ? 'disabled' : ''} title="${!f.ativo || (f.boletos_pendentes || 0) === 0 ? 'Sem boletos pendentes' : 'Enviar boletos deste fornecedor'}">Enviar boletos</button>
+                                <button class="btn btn-small" onclick="editar(${f.id})">Editar</button>
+                                <button class="btn btn-small btn-danger" onclick="excluir(${f.id})">Excluir</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+                // Paginação
+                const pag = document.getElementById('paginacao');
+                pag.innerHTML = '';
+                if (data.total_paginas > 1) {
+                    for (let i = 1; i <= data.total_paginas; i++) {
+                        const b = document.createElement('button');
+                        b.className = 'btn btn-small' + (i === pagina ? ' btn-primary' : '');
+                        b.textContent = i;
+                        b.addEventListener('click', () => { pagina = i; carregar(); });
+                        pag.appendChild(b);
+                    }
+                }
+            }
+
+            window.carregar = carregar;
+
+            function executarBusca() {
+                busca = document.getElementById('busca').value.trim();
+                pagina = 1;
+                carregar();
+            }
+
+            async function exportar(formato) {
+                const qs = new URLSearchParams({
+                    formato,
+                    busca: document.getElementById('busca').value.trim(),
+                    apenas_ativos: document.getElementById('apenasAtivos').checked ? '1' : '0',
+                });
+                try {
+                    await api.download('/api/fornecedores/exportar.php?' + qs);
+                } catch (err) {
+                    alert(err.message);
+                }
+            }
+            window.exportar = exportar;
+
+            function atualizarIndicadoresOrdenacao() {
+                document.querySelectorAll('#tblFornecedores th.sortable').forEach(th => {
+                    const campo = th.getAttribute('data-ordem');
+                    const ind = th.querySelector('.sort-ind');
+                    if (ind) ind.textContent = (campo === ordem) ? (direcao === 'ASC' ? '▲' : '▼') : '';
+                });
+            }
+
+            document.getElementById('btnBuscar').addEventListener('click', executarBusca);
+            document.getElementById('busca').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    executarBusca();
+                }
+            });
+            document.getElementById('busca').addEventListener('input', debounce(() => {
+                busca = document.getElementById('busca').value.trim();
+                pagina = 1;
+                carregar();
+            }, 400));
+
+            document.querySelectorAll('#tblFornecedores th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const campo = th.getAttribute('data-ordem');
+                    if (ordem === campo) {
+                        direcao = direcao === 'ASC' ? 'DESC' : 'ASC';
+                    } else {
+                        ordem = campo;
+                        direcao = 'ASC';
+                    }
+                    pagina = 1;
+                    atualizarIndicadoresOrdenacao();
+                    carregar();
+                });
+            });
+
+            document.getElementById('apenasAtivos').addEventListener('change', (e) => {
+                apenasAtivos = e.target.checked;
+                carregar();
+            });
+
+            document.getElementById('btnExportCsv').addEventListener('click', () => exportar('csv'));
+            document.getElementById('btnExportXlsx').addEventListener('click', () => exportar('xlsx'));
+
+document.getElementById('formFornecedor').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const errorDiv = document.getElementById('formError');
+
+                const payload = {
+                    id: document.getElementById('f_id').value || null,
+                    cod_for: document.getElementById('f_cod_for').value,
+                    fan_for: document.getElementById('f_fan_for').value,
+                    raz_for: document.getElementById('f_raz_for').value,
+                    ativo: document.getElementById('f_ativo').value,
+                    email_for: document.getElementById('f_email_for').value,
+                    email_for_2: document.getElementById('f_email_for_2').value,
+                    email_for_3: document.getElementById('f_email_for_3').value,
+                    email_for_4: document.getElementById('f_email_for_4').value,
+                    email_for_5: document.getElementById('f_email_for_5').value,
+                    email_for_6: document.getElementById('f_email_for_6').value,
+                };
+
+                try {
+                    const data = await api.post('/api/fornecedores/salvar.php', payload);
+                    alert(data.message);
+                    fecharModal();
+                    carregar();
+                } catch (err) {
+                    errorDiv.textContent = err.message;
+                    errorDiv.style.display = 'block';
+                }
+            });
+
+            atualizarIndicadoresOrdenacao();
+            carregar();
+        });
+    </script>
+</body>
+</html>

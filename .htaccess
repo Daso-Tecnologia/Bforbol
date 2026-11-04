@@ -1,0 +1,23 @@
+# Sistema de Envio de Boletos - PHP Puro
+# Redireciona todas as requisições não-arquivo para o front controller
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Permitir acesso direto a arquivos existentes (css, js, etc.)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Tudo mais vai para o front controller
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# Segurança: impedir acesso a arquivos sensíveis
+<FilesMatch "^(\.env|composer\.json|composer\.lock|.*\.log)$">
+    Require all denied
+</FilesMatch>
+
+# Impedir listagem de diretórios
+Options -Indexes

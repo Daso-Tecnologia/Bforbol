@@ -1,0 +1,32 @@
+{
+    "name": "exemplo/bforbol",
+    "description": "Sistema web de envio de boletos de comissão a fornecedores (migração do legado FiveWin/Harbour)",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.1",
+        "phpmailer/phpmailer": "^6.9",
+        "firebase/php-jwt": "^6.10",
+        "ext-pdo": "*",
+        "ext-json": "*",
+        "ext-fileinfo": "*"
+    },
+    "suggest": {
+        "ext-pdo_sqlsrv": "Necessário para conexão MSSQL com driver sqlsrv",
+        "ext-pdo_odbc": "Alternativa para conexão MSSQL via ODBC"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "policy": {
+            "advisories": {
+                "ignore-id": ["PKSA-y2cr-5h3j-g3ys"]
+            }
+        }
+    }
+}

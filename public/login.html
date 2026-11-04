@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body class="login-body">
+    <div class="login-container">
+        <div class="login-logo">
+            <h1>Boletos</h1>
+            <p>Sua Empresa - Envio de Comissões</p>
+        </div>
+
+        <form id="loginForm" class="login-form">
+            <div class="form-group">
+                <label for="email">E-mail corporativo</label>
+                <input type="email" id="email" name="email" placeholder="contato@exemplo.com.br" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label for="senha">Senha</label>
+                <input type="password" id="senha" name="senha" placeholder="••••••••" required>
+            </div>
+
+            <div class="form-error" id="loginError" style="display:none;"></div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="btnLogin">Entrar</button>
+
+            <div class="login-extra">
+                <span class="badge-sso">Acesso corporativo ABSTRA disponível</span>
+            </div>
+        </form>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        const form = document.getElementById('loginForm');
+        const errorDiv = document.getElementById('loginError');
+        const btnLogin = document.getElementById('btnLogin');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorDiv.style.display = 'none';
+
+            const email = document.getElementById('email').value.trim();
+            const senha = document.getElementById('senha').value;
+
+            if (!email || !senha) {
+                errorDiv.textContent = 'Informe e-mail e senha.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            btnLogin.disabled = true;
+            btnLogin.textContent = 'Entrando...';
+
+            try {
+                const data = await api.post('/api/auth/login.php', { email, senha });
+
+                if (data.success && data.token) {
+                    api.setToken(data.token);
+                    localStorage.setItem('boleto_usuario', JSON.stringify(data.usuario));
+                    window.location.href = 'index.html';
+                } else {
+                    errorDiv.textContent = data.error || 'Falha no login.';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.textContent = err.message || 'Erro de conexão. Tente novamente.';
+                errorDiv.style.display = 'block';
+            } finally {
+                btnLogin.disabled = false;
+                btnLogin.textContent = 'Entrar';
+            }
+        });
+    </script>
+</body>
+</html>

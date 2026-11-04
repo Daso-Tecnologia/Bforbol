@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - Sistema de Boletos</title>
+    <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+    <nav class="topbar">
+        <div class="topbar-brand">📄 Boletos - Sua Empresa</div>
+        <div class="topbar-nav">
+            <a href="index.html">Painel</a>
+            <a href="upload.html">Upload de Boletos</a>
+            <a href="fornecedores.html">Fornecedores</a>
+            <a href="envios.html">Envios</a>
+            <a href="relatorios.html" class="active">Relatórios</a>
+            <a href="usuarios.html">Usuários</a>
+            <a href="testar_email.html">Testar E-mail</a>
+            <a href="config_smtp.html" class="admin-only">Config. E-mail</a>
+            <a href="sobre.html">Sobre</a>
+        </div>
+        <div class="topbar-user">
+            <span id="userNome"></span>
+            <button class="btn btn-small btn-outline" id="btnLogout" type="button" onclick="sair()">Sair</button>
+        </div>
+    </nav>
+
+    <main class="container">
+        <h2>Relatórios de Envios</h2>
+        <p class="muted">Gere relatórios dos envios de boletos em PDF, Excel (XLSX) ou CSV (padrão aberto).</p>
+
+        <div class="panel">
+            <h3>Filtros</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="r_estado">Estado</label>
+                    <select id="r_estado">
+                        <option value="">Todos</option>
+                        <option value="pendente">Pendentes</option>
+                        <option value="enviado">Enviados</option>
+                        <option value="erro">Erros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="r_data_inicial">Data inicial</label>
+                    <input type="date" id="r_data_inicial">
+                </div>
+                <div class="form-group">
+                    <label for="r_data_final">Data final</label>
+                    <input type="date" id="r_data_final">
+                </div>
+            </div>
+
+            <h3>Formato</h3>
+            <div class="format-options">
+                <button class="btn btn-primary" onclick="baixar('pdf')">⬇ PDF</button>
+                <button class="btn" onclick="baixar('xlsx')">⬇ Excel (XLSX)</button>
+                <button class="btn" onclick="baixar('csv')">⬇ CSV</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            auth.verificar();
+            window.estadoFiltro = '';
+            window.dataInicial = '';
+            window.dataFinal = '';
+        });
+
+        // Atualizar filtros globais ao mudar
+        document.addEventListener('DOMContentLoaded', () => {
+            ['r_estado', 'r_data_inicial', 'r_data_final'].forEach(id => {
+                document.getElementById(id).addEventListener('change', (e) => {
+                    window.estadoFiltro = document.getElementById('r_estado').value;
+                    window.dataInicial = document.getElementById('r_data_inicial').value;
+                    window.dataFinal = document.getElementById('r_data_final').value;
+                });
+            });
+        });
+
+        async function baixar(formato) {
+            const qs = new URLSearchParams({
+                formato,
+                estado: window.estadoFiltro,
+                data_inicial: window.dataInicial,
+                data_final: window.dataFinal,
+            });
+
+            try {
+                await api.download('/api/envios/relatorio.php?' + qs);
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+    </script>
+</body>
+</html>
