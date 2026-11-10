@@ -35,17 +35,27 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 $limite = isset($input['limite']) ? max(1, (int) $input['limite']) : 500;
+// Cursor: só processa envios com id MAIOR que este. Um envio que falhou continua
+// "pendente" e, sem o cursor, seria tentado de novo em loop pelo front-end.
+$aposId = isset($input['apos_id']) ? max(0, (int) $input['apos_id']) : 0;
+
+// Orçamento de tempo por chamada HTTP: o balanceador da AWS e o Apache cortam em
+// 60 s. Para antes de iniciar um novo envio que provavelmente passaria disso; o
+// front-end chama de novo até "concluido" = true.
+const ORCAMENTO_SEGUNDOS = 40.0;
+$inicio = microtime(true);
 
 $pdo = getConnection();
 
-// Buscar todos os envios pendentes
+// Buscar os envios pendentes (depois do cursor)
 $stmt = $pdo->prepare(
     'SELECT * FROM envios_log
-     WHERE estado = :estado
+     WHERE estado = :estado AND id > :apos
      ORDER BY id ASC
      LIMIT :limite'
 );
 $stmt->bindValue(':estado', 'pendente', PDO::PARAM_STR);
+$stmt->bindValue(':apos', $aposId, PDO::PARAM_INT);
 $stmt->bindValue(':limite', $limite, PDO::PARAM_INT);
 $stmt->execute();
 $pendentes = $stmt->fetchAll();
@@ -58,6 +68,9 @@ if (count($pendentes) === 0) {
         'enviados' => 0,
         'falhas'  => 0,
         'resultados' => [],
+        'ultimo_id' => $aposId,
+        'restantes' => 0,
+        'concluido' => true,
     ]);
     exit;
 }
@@ -73,7 +86,21 @@ $resultados = [];
 $enviados = 0;
 $falhas = 0;
 
+$processados = 0;
+$ultimoId = $aposId;
+
 foreach ($pendentes as $envio) {
+    // Estimativa do próximo envio = média dos já feitos (com folga de 50%).
+    // Sempre faz ao menos 1 envio por chamada, para a fila andar.
+    if ($processados > 0) {
+        $media = (microtime(true) - $inicio) / $processados;
+        if ((microtime(true) - $inicio) + ($media * 1.5) > ORCAMENTO_SEGUNDOS) {
+            break;
+        }
+    }
+    $processados++;
+    $ultimoId = (int) $envio['id'];
+
     try {
         $resultado = ['id' => (int) $envio['id'], 'ok' => false, 'mensagem' => ''];
 
@@ -151,11 +178,19 @@ foreach ($pendentes as $envio) {
     }
 }
 
+// Quantos ainda faltam depois do cursor (pendentes com id > ultimoId)?
+$stmtRest = $pdo->prepare("SELECT COUNT(*) FROM envios_log WHERE estado = 'pendente' AND id > :ultimo");
+$stmtRest->execute(['ultimo' => $ultimoId]);
+$restantes = (int) $stmtRest->fetchColumn();
+
 echo json_encode([
     'success'    => true,
     'message'    => "Fila processada: {$enviados} enviado(s), {$falhas} falha(s).",
-    'total'      => count($pendentes),
+    'total'      => $processados,
     'enviados'   => $enviados,
     'falhas'     => $falhas,
     'resultados' => $resultados,
+    'ultimo_id'  => $ultimoId,
+    'restantes'  => $restantes,
+    'concluido'  => $restantes === 0,
 ]);

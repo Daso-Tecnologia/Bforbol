@@ -55,7 +55,23 @@ $resultados = [];
 $reenviados = 0;
 $falhas    = 0;
 
+// Orçamento de tempo por chamada (balanceador/Apache cortam em 60 s): os ids que
+// não couberem voltam em "nao_processados" e o front-end chama de novo com eles.
+const ORCAMENTO_SEGUNDOS = 40.0;
+$inicio = microtime(true);
+$processados = 0;
+$naoProcessados = [];
+
 foreach ($ids as $id) {
+    if ($processados > 0) {
+        $media = (microtime(true) - $inicio) / $processados;
+        if ((microtime(true) - $inicio) + ($media * 1.5) > ORCAMENTO_SEGUNDOS) {
+            $naoProcessados[] = $id;
+            continue;
+        }
+    }
+    $processados++;
+
     try {
         $resultado = ['id' => $id, 'ok' => false, 'mensagem' => ''];
 
@@ -147,8 +163,10 @@ foreach ($ids as $id) {
 echo json_encode([
     'success'      => true,
     'message'      => "Lote processado: {$reenviados} reenviado(s), {$falhas} falha(s).",
-    'total'        => count($ids),
+    'total'        => $processados,
     'reenviados'   => $reenviados,
     'falhas'       => $falhas,
     'resultados'   => $resultados,
+    'nao_processados' => array_values($naoProcessados),
+    'concluido'    => count($naoProcessados) === 0,
 ]);

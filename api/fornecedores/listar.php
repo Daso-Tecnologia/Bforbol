@@ -26,7 +26,8 @@ $pagina   = isset($_GET['pagina']) ? max(1, (int) $_GET['pagina']) : 1;
 $porPagina = isset($_GET['por_pagina']) ? min(100, max(1, (int) $_GET['por_pagina'])) : 20;
 $offset   = ($pagina - 1) * $porPagina;
 $busca    = isset($_GET['busca']) ? trim($_GET['busca']) : '';
-$apenasAtivos = isset($_GET['apenas_ativos']) ? (bool) $_GET['apenas_ativos'] : false;
+// A tela envia "true"/"false" (texto); (bool)"false" seria true em PHP, o que impedia ver os inativos.
+$apenasAtivos = isset($_GET['apenas_ativos']) ? filter_var($_GET['apenas_ativos'], FILTER_VALIDATE_BOOLEAN) : false;
 
 // Ordenação (indexação) por colunas seguras (whitelist) para evitar SQL injection.
 $camposOrdenaveis = [

@@ -18,8 +18,9 @@ function getConnection(): PDO
 
     if ($pdo === null) {
         $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=%s',
+            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
             DB_HOST,
+            DB_PORT,
             DB_NAME,
             DB_CHARSET
         );

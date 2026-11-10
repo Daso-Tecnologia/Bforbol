@@ -165,6 +165,7 @@ defineConst('APP_DEBUG', envBool('APP_DEBUG', false));
 
 // -------- Banco de Dados MySQL --------
 defineConst('DB_HOST',    (string) env('DB_HOST', 'localhost'));
+defineConst('DB_PORT',    envInt('DB_PORT', 3306));
 defineConst('DB_NAME',    (string) env('DB_NAME', 'saas_boletos'));
 defineConst('DB_USER',    (string) env('DB_USER', 'root'));
 defineConst('DB_PASS',    (string) env('DB_PASS', ''));

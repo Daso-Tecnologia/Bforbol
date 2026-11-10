@@ -57,26 +57,10 @@ $ativo = isset($input['ativo']) ? (int) (bool) $input['ativo'] : 1;
 
 $pdo = getConnection();
 
-// No cadastro (novo fornecedor), o código deve existir na tabela wg_ven
-// do repositório corporativo (MSSQL). Não permite cadastrar códigos desconhecidos.
+// O cadastro manual NÃO exige mais que o código conste na wg_ven (vendas) do GATE:
+// o boleto enviado já prova que a cobrança existe.
 
-if (empty($input['id'])) {
-        $existe = mssqlCodForExiste($codFor);
-
-        if ($existe === null) {
-            http_response_code(503);
-            echo json_encode(['error' => 'Repositório GATE (MSSQL) indisponível no momento. Tente novamente em instantes.']);
-            exit;
-        }
-
-        if ($existe === false) {
-            http_response_code(422);
-            echo json_encode(['error' => 'Código ' . $codFor . ' não encontrado na tabela wg_ven do repositório corporativo (GATE). Cadastro não permitido.']);
-            exit;
-        }
-    }
-
-    // Verificar duplicidade
+// Verificar duplicidade
 $sql = "SELECT id FROM fornecedores WHERE cod_for = :cod_for";
 $params = ['cod_for' => $codFor];
 if (!empty($input['id'])) {

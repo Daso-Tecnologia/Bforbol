@@ -89,8 +89,13 @@
                     const textoOriginal = btnEnviar.textContent;
                     btnEnviar.textContent = 'Enviando...';
                     try {
-                        const data = await api.post('/api/envios/enviar_todos.php', {});
-                        alert(data.message);
+                        // Em partes (cada chamada < 60 s), com progresso no botão.
+                        const r = await api.enviarPendentes(p => {
+                            btnEnviar.textContent = 'Enviando... ' + p.enviados + ' enviado(s)' + (p.restantes ? ', faltam ' + p.restantes : '');
+                        });
+                        let msg = 'Fila processada: ' + r.enviados + ' enviado(s), ' + r.falhas + ' falha(s).';
+                        if (r.detalhesFalhas.length) msg += '\n\nFalhas:\n  ' + r.detalhesFalhas.join('\n  ');
+                        alert(msg);
                         location.reload();
                     } catch (err) {
                         alert('Falha ao enviar pendentes: ' + err.message);

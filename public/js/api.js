@@ -106,6 +106,86 @@ const api = (() => {
             });
         },
 
+        /**
+         * Envia TODOS os pendentes em várias chamadas curtas (cada uma < 60 s, o limite
+         * do balanceador/Apache). Repete até o servidor dizer "concluido".
+         * onProgresso({enviados, falhas, restantes}) é chamado a cada parte.
+         */
+        async enviarPendentes(onProgresso) {
+            let aposId = 0, enviados = 0, falhas = 0, partes = 0;
+            const detalhesFalhas = [];
+            for (;;) {
+                const d = await this.post('/api/envios/enviar_todos.php', { apos_id: aposId });
+                partes++;
+                enviados += d.enviados || 0;
+                falhas += d.falhas || 0;
+                (d.resultados || []).filter(r => !r.ok).forEach(r => detalhesFalhas.push('#' + r.id + ': ' + r.mensagem));
+                if (typeof onProgresso === 'function') onProgresso({ enviados, falhas, restantes: d.restantes || 0 });
+                if (d.concluido || !(d.ultimo_id > aposId) || partes >= 500) break;
+                aposId = d.ultimo_id;
+            }
+            return { enviados, falhas, detalhesFalhas };
+        },
+
+        /** Reenvia os ids dados em várias chamadas curtas (< 60 s cada). */
+        async reenviarLote(ids, onProgresso) {
+            let fila = ids.slice(), reenviados = 0, falhas = 0, partes = 0;
+            const detalhesFalhas = [];
+            while (fila.length > 0 && partes < 500) {
+                const d = await this.post('/api/boletos/reenviar_lote.php', { ids: fila });
+                partes++;
+                reenviados += d.reenviados || 0;
+                falhas += d.falhas || 0;
+                (d.resultados || []).filter(r => !r.ok).forEach(r => detalhesFalhas.push('#' + r.id + ': ' + r.mensagem));
+                const sobra = d.nao_processados || [];
+                if (typeof onProgresso === 'function') onProgresso({ reenviados, falhas, restantes: sobra.length });
+                if (sobra.length >= fila.length) break; // sem progresso: evita laço infinito
+                fila = sobra;
+            }
+            return { reenviados, falhas, detalhesFalhas };
+        },
+
+        /**
+         * Lê a pasta de entrada em partes (cada chamada < 60 s). Junta os resultados.
+         */
+        async lerBoletos(onProgresso) {
+            let cursor = null, partes = 0, lotes = 0, examinados = 0;
+            const idsSessao = [];
+            const acc = { sem_fornecedor: [], nao_ativos: [], nao_wg_ven: [], gate_indisponivel: [], sem_email: [], acima_limite: [], duplicados: [], avisos_cadastro: [] };
+            for (;;) {
+                const d = await this.post('/api/boletos/ler.php', { apos_arquivo: cursor, ids_sessao: idsSessao });
+                partes++;
+                lotes += d.lotes_criados || 0;
+                examinados += d.examinados || 0;
+                (d.ids_criados || []).forEach(i => idsSessao.push(i));
+                Object.keys(acc).forEach(k => { acc[k] = acc[k].concat(d[k] || []); });
+                if (typeof onProgresso === 'function') onProgresso({ examinados, lotes });
+                if (!d.incompleto || !d.ultimo_arquivo || d.ultimo_arquivo === cursor || partes >= 500) break;
+                cursor = d.ultimo_arquivo;
+            }
+            return Object.assign({ lotes_criados: lotes, examinados }, acc);
+        },
+
+        /**
+         * Sincroniza fornecedores com o GATE em partes (< 60 s cada). Junta os resultados.
+         * escopo: 'sem_email' (só os sem e-mail principal) ou 'todos' (compara todos os ativos).
+         */
+        async sincronizarGate(escopo, onProgresso) {
+            let aposId = 0, partes = 0, verificados = 0, gateIndisponivel = false;
+            const acc = { completados: [], gate_sem_email: [], email_invalido: [], nao_encontrados: [], divergencias: [], nomes_diferentes: [] };
+            for (;;) {
+                const d = await this.post('/api/fornecedores/sincronizar_gate.php', { escopo, apos_id: aposId });
+                partes++;
+                verificados += d.verificados || 0;
+                Object.keys(acc).forEach(k => { acc[k] = acc[k].concat(d[k] || []); });
+                if (typeof onProgresso === 'function') onProgresso({ verificados });
+                if (d.gate_indisponivel) { gateIndisponivel = true; break; }
+                if (d.concluido || !(d.ultimo_id > aposId) || partes >= 500) break;
+                aposId = d.ultimo_id;
+            }
+            return Object.assign({ verificados, gate_indisponivel: gateIndisponivel }, acc);
+        },
+
         async download(url) {
             const res = await fetch(apiUrl(url), { method: 'GET', headers: headers() });
             if (!res.ok) {

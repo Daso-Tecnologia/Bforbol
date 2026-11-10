@@ -28,12 +28,26 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// Leitura em partes: cada chamada HTTP examina arquivos por no máximo ~40 s (o
+// balanceador e o Apache cortam em 60 s) e devolve um cursor ("ultimo_arquivo").
+// O front repete a chamada até "incompleto" = false.
+// "ids_sessao" = ids de envios_log criados nas chamadas anteriores desta mesma
+// leitura: lotes do mesmo fornecedor são unidos (continua 1 e-mail por fornecedor).
+$input = json_decode(file_get_contents('php://input'), true) ?: [];
+$aposArquivo = isset($input['apos_arquivo']) && is_string($input['apos_arquivo']) ? $input['apos_arquivo'] : null;
+$idsSessao = isset($input['ids_sessao']) && is_array($input['ids_sessao'])
+    ? array_values(array_filter(array_map('intval', $input['ids_sessao']), static fn (int $v): bool => $v > 0))
+    : [];
+
+set_time_limit(120);
+
 // 1) Processar a entrada: agrupar por fornecedor e copiar para pastas de cliente
-$resultado = BoletoReader::processarEntrada();
+$resultado = BoletoReader::processarEntrada($aposArquivo, 40.0);
 
 $pdo = getConnection();
 $lotesCriados = 0;
 $detalhes = [];
+$idsCriados = [];
 
 foreach ($resultado['lotes'] as $lote) {
     $fornecedorId = $lote['fornecedor_id'];
@@ -67,25 +81,61 @@ foreach ($resultado['lotes'] as $lote) {
     $stmtEmail->execute(['id' => $fornecedorId]);
     $destino = $stmtEmail->fetchColumn() ?: '';
 
-    // Registrar lote pendente na fila de envios (1 por fornecedor)
-    $stmt = $pdo->prepare(
-        'INSERT INTO envios_log
-            (fornecedor_id, cod_for, fan_for, destino, anexos, assunto, estado, data_tentativa)
-         VALUES
-            (:fornecedor_id, :cod_for, :fan_for, :destino, :anexos, :assunto, :estado, :data_tentativa)'
-    );
-    $stmt->execute([
-        'fornecedor_id' => $fornecedorId,
-        'cod_for'       => $codFor,
-        'fan_for'       => $fanFor,
-        'destino'       => $destino,
-        'anexos'        => json_encode($anexos),
-        'assunto'       => $assunto,
-        'estado'        => 'pendente',
-        'data_tentativa'=> date('Y-m-d H:i:s'),
-    ]);
+    // Já existe, nesta mesma leitura (chamadas anteriores), um envio PENDENTE deste
+    // fornecedor? Então junta os anexos nele em vez de criar um segundo e-mail.
+    $uniu = false;
+    if ($idsSessao !== []) {
+        $marcas = implode(',', array_fill(0, count($idsSessao), '?'));
+        $stmtEx = $pdo->prepare(
+            "SELECT id, anexos FROM envios_log
+             WHERE fornecedor_id = ? AND estado = 'pendente' AND id IN ({$marcas}) LIMIT 1"
+        );
+        $stmtEx->execute(array_merge([$fornecedorId], $idsSessao));
+        $existente = $stmtEx->fetch();
+        if ($existente) {
+            $anexosAntigos = json_decode((string) ($existente['anexos'] ?? '[]'), true);
+            $anexosAntigos = is_array($anexosAntigos) ? $anexosAntigos : [];
+            $todosAnexos = array_values(array_unique(array_merge($anexosAntigos, $anexos)));
 
-    $lotesCriados++;
+            $nfsTodas = [];
+            foreach ($todosAnexos as $caminho) {
+                $nf = BoletoReader::extrairNF(basename((string) $caminho));
+                if ($nf) $nfsTodas[] = $nf;
+            }
+            $assuntoUnido = BoletoReader::montarAssunto($fanFor, $codFor, array_unique($nfsTodas));
+
+            $stmtUp = $pdo->prepare('UPDATE envios_log SET anexos = :anexos, assunto = :assunto WHERE id = :id');
+            $stmtUp->execute([
+                'anexos'  => json_encode($todosAnexos),
+                'assunto' => $assuntoUnido,
+                'id'      => (int) $existente['id'],
+            ]);
+            $uniu = true;
+        }
+    }
+
+    // Registrar lote pendente na fila de envios (1 por fornecedor)
+    if (!$uniu) {
+        $stmt = $pdo->prepare(
+            'INSERT INTO envios_log
+                (fornecedor_id, cod_for, fan_for, destino, anexos, assunto, estado, data_tentativa)
+             VALUES
+                (:fornecedor_id, :cod_for, :fan_for, :destino, :anexos, :assunto, :estado, :data_tentativa)'
+        );
+        $stmt->execute([
+            'fornecedor_id' => $fornecedorId,
+            'cod_for'       => $codFor,
+            'fan_for'       => $fanFor,
+            'destino'       => $destino,
+            'anexos'        => json_encode($anexos),
+            'assunto'       => $assunto,
+            'estado'        => 'pendente',
+            'data_tentativa'=> date('Y-m-d H:i:s'),
+        ]);
+        $idsCriados[] = (int) $pdo->lastInsertId();
+        $lotesCriados++;
+    }
+
     $detalhes[] = [
         'fornecedor_id' => $fornecedorId,
         'cod_for'       => $codFor,
@@ -127,4 +177,10 @@ echo json_encode([
     'sem_email'        => $resultado['sem_email'] ?? [],
     'acima_limite'     => $resultado['acima_limite'] ?? [],
     'duplicados'       => $duplicados,
+    'avisos_cadastro'  => $resultado['avisos_cadastro'] ?? [],
+    // Controle da leitura em partes (usado pelo front-end)
+    'incompleto'       => (bool) ($resultado['incompleto'] ?? false),
+    'ultimo_arquivo'   => $resultado['ultimo_arquivo'] ?? null,
+    'examinados'       => (int) ($resultado['examinados'] ?? 0),
+    'ids_criados'      => $idsCriados,
 ]);
