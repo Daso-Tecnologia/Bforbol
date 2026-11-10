@@ -133,28 +133,50 @@
             document.getElementById('btnUpload').addEventListener('click', async () => {
                 if (arquivosSelecionados.length === 0) return;
 
-                const formData = new FormData();
-                arquivosSelecionados.forEach(f => formData.append('boletos[]', f));
-
                 const btn = document.getElementById('btnUpload');
                 btn.disabled = true;
                 btn.textContent = 'Enviando...';
 
-                try {
-                    const data = await api.upload('/api/boletos/upload.php', formData);
-                    resultMsgG.innerHTML = `<p class="success-msg">${data.message}</p>`;
+                // Envia em grupos pequenos: cada chamada ao servidor precisa terminar em
+                // menos de 60 s (limite do balanceador/Apache), mesmo com muitos arquivos.
+                const TAMANHO_GRUPO = 5;
+                const total = arquivosSelecionados.length;
+                let aceitos = 0;
+                const erros = [];
+                const falhouGrupo = [];
 
-                    if (data.erros && data.erros.length > 0) {
-                        resultMsgG.innerHTML += `<ul class="error-list">${data.erros.map(e => `<li>${e}</li>`).join('')}</ul>`;
+                for (let i = 0; i < total; i += TAMANHO_GRUPO) {
+                    const grupo = arquivosSelecionados.slice(i, i + TAMANHO_GRUPO);
+                    btn.textContent = 'Enviando... ' + Math.min(i + grupo.length, total) + ' de ' + total;
+                    const formData = new FormData();
+                    grupo.forEach(f => formData.append('boletos[]', f));
+                    try {
+                        const data = await api.upload('/api/boletos/upload.php', formData);
+                        aceitos += data.arquivos_aceitos || 0;
+                        (data.erros || []).forEach(e => erros.push(e));
+                    } catch (err) {
+                        if (err.data && Array.isArray(err.data.erros)) {
+                            err.data.erros.forEach(e => erros.push(e));   // grupo sem nenhum aceito (422)
+                        } else {
+                            // Falha do grupo inteiro (ex.: 504): o arquivo pode ter chegado; ao reenviar,
+                            // o sistema avisa "já enviado" e não duplica.
+                            grupo.forEach(f => falhouGrupo.push(f.name));
+                            erros.push('Grupo com falha (' + err.message + '): ' + grupo.map(f => f.name).join(', '));
+                        }
                     }
+                }
 
+                try {
+                    const cls = aceitos > 0 ? 'success-msg' : 'error-msg';
+                    resultMsgG.innerHTML = `<p class="${cls}">Upload concluído: ${aceitos} de ${total} arquivo(s) aceito(s), ${erros.length} aviso(s)/erro(s).</p>`;
+                    if (erros.length > 0) {
+                        resultMsgG.innerHTML += `<ul class="error-list">${erros.map(e => `<li>${e}</li>`).join('')}</ul>`;
+                    }
                     resultPanelG.style.display = 'block';
                     fileListPanelG.style.display = 'none';
-                    arquivosSelecionados = [];
+                    // Mantém na lista só os que falharam por erro de rede, para tentar de novo.
+                    arquivosSelecionados = arquivosSelecionados.filter(f => falhouGrupo.includes(f.name));
                     renderLista();
-                } catch (err) {
-                    resultMsgG.innerHTML = `<p class="error-msg">${err.message}</p>`;
-                    resultPanelG.style.display = 'block';
                 } finally {
                     btn.disabled = false;
                     btn.textContent = 'Enviar para o servidor';
@@ -167,13 +189,17 @@
                 btn.textContent = 'Processando...';
 
                 try {
-                    const data = await api.post('/api/boletos/ler.php', {});
-                    resultMsgG.innerHTML = `<p class="success-msg">${data.message}</p>`;
+                    // Leitura em partes (cada chamada < 60 s).
+                    const data = await api.lerBoletos(p => {
+                        btn.textContent = 'Processando... ' + p.examinados + ' arquivo(s) lido(s)';
+                    });
+                    let resumo = `Leitura concluída: ${data.lotes_criados} lote(s) de envio criado(s).`;
+                    if (data.sem_email.length > 0) resumo += ` Sem e-mail principal (filas NÃO criadas): ${data.sem_email.length} arquivo(s).`;
+                    if (data.duplicados.length > 0) resumo += ` Duplicados ignorados (já existiam): ${data.duplicados.length} arquivo(s).`;
+                    if (data.gate_indisponivel.length > 0) resumo += ` GATE (MSSQL) indisponível: ${data.gate_indisponivel.length} arquivo(s) não processado(s).`;
+                    resultMsgG.innerHTML = `<p class="success-msg">${resumo}</p>`;
                     if (data.acima_limite && data.acima_limite.length > 0) {
                         resultMsgG.innerHTML += `<p class="error-msg"><strong>Fornecedores excedendo o limite de ${data.acima_limite[0].limite_mb} MB:</strong></p><ul class="error-list">${data.acima_limite.map(a => `<li>${a.fornecedor} (${a.cod_for}) — total ${a.total_mb} MB em ${a.total_arquivos} arquivo(s) — envio não criado</li>`).join('')}</ul>`;
-                    }
-                    if (data.nao_wg_ven && data.nao_wg_ven.length > 0) {
-                        resultMsgG.innerHTML += `<p class="muted">Código não encontrado na wg_ven (GATE): ${data.nao_wg_ven.join(', ')}</p>`;
                     }
                     if (data.gate_indisponivel && data.gate_indisponivel.length > 0) {
                         resultMsgG.innerHTML += `<p class="error-msg">GATE (MSSQL) indisponível — arquivos não processados: ${data.gate_indisponivel.join(', ')}</p>`;
@@ -182,12 +208,21 @@
                         resultMsgG.innerHTML += `<p class="error-msg">Fornecedores sem e-mail principal — filas NÃO criadas. Cadastre o e-mail no fornecedor e execute "Ler boletos" novamente: ${data.sem_email.join(', ')}</p>`;
                     }
                     if (data.sem_fornecedor && data.sem_fornecedor.length > 0) {
-                        resultMsgG.innerHTML += `<p class="muted">Sem fornecedor: ${data.sem_fornecedor.join(', ')}</p>`;
+                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedor não cadastrado (o código não existe no cadastro local nem no cadastro do GATE). Confira o código ou cadastre o fornecedor manualmente e execute "Ler boletos" novamente: ${data.sem_fornecedor.join(', ')}</p>`;
                     }
                     if (data.nao_ativos && data.nao_ativos.length > 0) {
                         resultMsgG.innerHTML += `<p class="muted">Não ativos: ${data.nao_ativos.join(', ')}</p>`;
                     }
-                    setTimeout(() => window.location.href = 'envios.html', 2500);
+                    if (data.avisos_cadastro && data.avisos_cadastro.length > 0) {
+                        resultMsgG.innerHTML += `<p class="muted"><strong>Avisos sobre o cadastro dos fornecedores (GATE):</strong></p><ul class="error-list">${data.avisos_cadastro.map(a => `<li>${a.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</li>`).join('')}</ul>`;
+                    }
+                    const comPendencia = ['sem_email', 'gate_indisponivel', 'sem_fornecedor', 'nao_ativos', 'acima_limite']
+                        .some(k => data[k] && data[k].length > 0);
+                    if (comPendencia) {
+                        resultMsgG.innerHTML += `<p class="error-msg"><strong>Alguns arquivos não geraram envio.</strong> <a href="relatorios.html#arquivos">Ver relatório detalhado com o motivo e o que fazer em cada caso</a> (também em PDF, Excel e CSV).</p>`;
+                    } else {
+                        setTimeout(() => window.location.href = 'envios.html', 2500);
+                    }
                 } catch (err) {
                     resultMsgG.innerHTML = `<p class="error-msg">${err.message}</p>`;
                 } finally {

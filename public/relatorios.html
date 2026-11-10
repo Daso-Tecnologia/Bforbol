@@ -59,6 +59,20 @@
                 <button class="btn" onclick="baixar('csv')">⬇ CSV</button>
             </div>
         </div>
+
+        <h2 id="arquivos" style="margin-top:32px;">Arquivos aguardando processamento</h2>
+        <p class="muted">Mostra, para cada arquivo parado na pasta de entrada, o que está acontecendo e o que fazer. É uma consulta somente de leitura: nada é alterado nem enviado.</p>
+
+        <div class="panel">
+            <div class="format-options">
+                <button class="btn btn-primary" id="btnVerificar" onclick="verificarPendencias()">🔎 Verificar agora</button>
+                <button class="btn" onclick="baixarPendencias('pdf')">⬇ PDF</button>
+                <button class="btn" onclick="baixarPendencias('xlsx')">⬇ Excel (XLSX)</button>
+                <button class="btn" onclick="baixarPendencias('csv')">⬇ CSV</button>
+            </div>
+            <div id="pendResumo"></div>
+            <div id="pendTabela" style="overflow-x:auto;"></div>
+        </div>
     </main>
 
     <script src="js/api.js"></script>
@@ -80,6 +94,54 @@
                     window.dataFinal = document.getElementById('r_data_final').value;
                 });
             });
+        });
+
+        function esc(t) {
+            return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        const COR_GRAVIDADE = { erro: '#c0392b', aviso: '#b9770e', ok: '#1e8449' };
+
+        async function verificarPendencias() {
+            const btn = document.getElementById('btnVerificar');
+            const resumo = document.getElementById('pendResumo');
+            const tabela = document.getElementById('pendTabela');
+            btn.disabled = true;
+            btn.textContent = 'Verificando...';
+            resumo.innerHTML = '';
+            tabela.innerHTML = '';
+            try {
+                const d = await api.get('/api/boletos/pendencias.php');
+                if (!d.total) {
+                    resumo.innerHTML = '<p class="success-msg">Nenhum arquivo aguardando processamento na pasta de entrada.</p>';
+                    return;
+                }
+                resumo.innerHTML = '<p class="muted">Gerado em ' + esc(d.gerado_em) + ' — ' + d.total + ' arquivo(s): '
+                    + d.resumo.map(r => '<strong style="color:' + COR_GRAVIDADE[r.gravidade] + '">' + esc(r.rotulo) + ': ' + r.quantidade + '</strong>').join(' &nbsp;|&nbsp; ')
+                    + '</p>';
+                tabela.innerHTML = '<table class="table"><thead><tr><th>Arquivo</th><th>Código</th><th>Fornecedor</th><th>Situação</th><th>O que está ocorrendo</th><th>O que fazer</th></tr></thead><tbody>'
+                    + d.linhas.map(l => '<tr style="color:' + COR_GRAVIDADE[l.gravidade] + '">'
+                        + '<td>' + esc(l.arquivo) + '</td><td>' + esc(l.cod_for) + '</td><td>' + esc(l.fornecedor) + '</td>'
+                        + '<td><strong>' + esc(l.situacao_rotulo) + '</strong></td><td>' + esc(l.ocorrencia) + '</td><td>' + esc(l.acao) + '</td></tr>').join('')
+                    + '</tbody></table>';
+            } catch (err) {
+                resumo.innerHTML = '<p class="error-msg">' + esc(err.message) + '</p>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔎 Verificar agora';
+            }
+        }
+
+        async function baixarPendencias(formato) {
+            try {
+                await api.download('/api/boletos/pendencias.php?formato=' + encodeURIComponent(formato));
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            if (location.hash === '#arquivos') verificarPendencias();
         });
 
         async function baixar(formato) {

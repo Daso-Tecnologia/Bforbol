@@ -257,7 +257,7 @@ class RelatorioGenerator
     /**
      * Monta o arquivo PDF (objetos + xref) a partir das páginas geradas.
      */
-    private static function montarArquivoPdf(array $paginas, float $W, float $H): string
+    public static function montarArquivoPdf(array $paginas, float $W, float $H): string
     {
         $objs = [];
         $objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';

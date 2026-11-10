@@ -248,9 +248,9 @@ Todas as rotas retornam JSON e, exceto o login, exigem `Authorization: Bearer <J
 | Grupo | Endpoints (`api/`) | Função |
 |---|---|---|
 | **Autenticação** | `auth/login`, `auth/validar_jwt` | Login com limite de tentativas; emissão e validação do token |
-| **Boletos** | `boletos/upload`, `ler`, `listar`, `enviar_fornecedor`, `reenviar`, `reenviar_lote` | Entrada de PDFs, leitura da pasta, criação da fila e reenvios |
+| **Boletos** | `boletos/upload`, `ler`, `listar`, `pendencias`, `enviar_fornecedor`, `reenviar`, `reenviar_lote` | Entrada de PDFs, leitura da pasta, criação da fila, reenvios e relatório (somente leitura) do que está aguardando processamento |
 | **Envios** | `envios/enviar_todos`, `listar`, `relatorio`, `limpiar` | Envio da fila, consulta, relatórios e limpeza da fila (erros, pendentes ou reinício completo; o histórico de enviados é sempre preservado) |
-| **Fornecedores** | `fornecedores/listar`, `salvar`, `excluir`, `exportar` | Cadastro (até 6 e-mails), busca paginada e exportação |
+| **Fornecedores** | `fornecedores/listar`, `salvar`, `excluir`, `exportar`, `sincronizar_gate` | Cadastro (até 6 e-mails), busca paginada, exportação e sincronização (somente administrador) que completa e-mails vazios a partir do ERP e lista divergências |
 | **Usuários** | `usuarios/listar`, `salvar`, `excluir` | Gestão de acessos |
 | **Configuração** | `configuracao/listar`, `salvar`, `smtp_listar`, `smtp_salvar`, `email/testar` | Parâmetros do sistema, SMTP e e-mail de teste |
 
@@ -270,7 +270,7 @@ Todas as rotas retornam JSON e, exceto o login, exigem `Authorization: Bearer <J
 | Upload de boletos | `public/upload.html` | Envio de PDFs com validação e relatório de erros por arquivo |
 | Fornecedores | `public/fornecedores.html` | Cadastro, busca e exportação |
 | Envios | `public/envios.html` | Enviados, pendentes e falhas; reenvio individual e em lote |
-| Relatórios | `public/relatorios.html` | Histórico em PDF, XLSX ou CSV, com filtros |
+| Relatórios | `public/relatorios.html` | Histórico em PDF, XLSX ou CSV, com filtros; painel **"Arquivos aguardando processamento"**, que explica, arquivo a arquivo, por que ele ainda não virou envio e o que fazer |
 | Usuários | `public/usuarios.html` | Gestão de acessos e níveis |
 | Config. e-mail / Testar e-mail | `public/config_smtp.html`, `testar_email.html` | Parâmetros SMTP e envio de teste |
 | Sobre | `public/sobre.html` | Descrição de uso para o usuário final |
@@ -283,7 +283,11 @@ Todas as rotas retornam JSON e, exceto o login, exigem `Authorization: Bearer <J
 - **Destinatários**: `Para` = e-mail principal; `CC` = e-mails 2 a 6 preenchidos manualmente + **CC fixo** opcional. Nunca há duplicidade entre `Para` e `CC`.
 - **Sem e-mail, sem envio**: se o fornecedor não tem e-mail, o arquivo fica na entrada até ser cadastrado.
 - **Anti-duplicidade**: um boleto já registrado em `log_upload` não é aceito novamente.
-- **E-mail do ERP nunca sobrescreve edição manual** (só completa quando o local está vazio).
+- **E-mail do ERP nunca sobrescreve edição manual** (só completa quando o local está vazio). Vários e-mails no ERP separados por `;`, `,` ou espaço são separados: o primeiro vira o principal e os demais, cópias.
+- **O upload prova a cobrança**: o fornecedor não precisa ter movimento de vendas no ERP; basta existir no cadastro local ou no cadastro oficial do ERP.
+- **Fornecedor inativo**: o `ativo` do **ERP é só informação** (gera aviso e o envio segue, pois podem existir boletos de comissões antigas); o `ativo` do **cadastro local** é o bloqueio manual — fornecedor desativado localmente retém o boleto, e o relatório de pendências explica o motivo.
+- **Avisos de cadastro** no "Ler boletos" (ERP sem e-mail, e-mail inválido, vários e-mails, ERP indisponível, fornecedor inativo no ERP) em vez de falhas silenciosas.
+- **Lotes curtos por chamada** (menos de 60 s): leitura, upload e envio processam em partes e o navegador repete até concluir, para não esbarrar no limite de tempo de proxies e balanceadores.
 - **Mensagem padrão** em HTML, com assinatura embutida (imagens inline por CID, com *fallback* para URL remota).
 
 ## 11. Segurança
@@ -321,9 +325,9 @@ mysql < database/schema.sql
 
 | Grupo | Variáveis |
 |---|---|
-| MySQL | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASS` |
+| MySQL | `DB_HOST`, `DB_PORT` (padrão 3306), `DB_NAME`, `DB_USER`, `DB_PASS` |
 | ERP (SQL Server) | `MSSQL_DRIVER`, `MSSQL_HOST`, `MSSQL_PORT`, `MSSQL_DB`, `MSSQL_USER`, `MSSQL_PASS`, `MSSQL_TABELA` |
-| SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `CC_FIXO` |
+| SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `CC_FIXO`, `SMTP_TIMEOUT` (padrão 20 s) |
 | Segurança | `JWT_SECRET` (≥ 32 caracteres), `JWT_EXPIRY`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_BLOCK_MINUTES`, `RATE_LIMIT_PER_MINUTE` |
 | Upload e fila | `UPLOAD_MAX_SIZE`, `ALLOWED_EXTENSIONS`, `WORKER_LIMITE`, `WORKER_INTERVALO_SEGUNDOS` |
 
@@ -369,6 +373,9 @@ bforbol/
 | **JWT sem estado** | API simples de escalar; expiração curta e segredo forte |
 | **Relatórios gerados sem biblioteca pesada** | PDF, XLSX e CSV produzidos diretamente, reduzindo dependências |
 | **Regras do legado preservadas** | Migração sem mudança de processo para o usuário final |
+| **Lotes curtos e consulta ao ERP em cache** | Cada chamada HTTP termina em menos de 60 s; o ERP é consultado uma vez por fornecedor e com parâmetro tipado (`CAST`), evitando varreduras lentas |
+| **Erros sempre em JSON** | Um tratador de encerramento transforma qualquer falha fatal em resposta JSON, nunca em corpo vazio |
+| **Diagnóstico antes de agir** | O relatório de pendências é somente leitura e usa a mesma ordem de decisão da leitura real |
 
 ## 15. Limitações conhecidas e próximos passos
 

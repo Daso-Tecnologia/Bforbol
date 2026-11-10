@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $formato       = $_GET['formato'] ?? 'csv';
 $busca         = isset($_GET['busca']) ? trim($_GET['busca']) : '';
-$apenasAtivos  = isset($_GET['apenas_ativos']) ? (bool) $_GET['apenas_ativos'] : false;
+$apenasAtivos  = isset($_GET['apenas_ativos']) ? filter_var($_GET['apenas_ativos'], FILTER_VALIDATE_BOOLEAN) : false;
 
 // Rate limit específico para downloads de fornecedores (10/min)
 rateLimit(10, 'fornecedores_export');

@@ -45,7 +45,69 @@ class MailSender
 
         $this->mail->CharSet = 'UTF-8';
         $this->mail->Timeout = SMTP_TIMEOUT;
+        // Reaproveita a conexão SMTP entre os e-mails de um mesmo lote (menos logins
+        // no servidor de e-mail, que pode limitar conexões/autenticações por minuto).
+        $this->mail->SMTPKeepAlive = true;
         $this->mail->setFrom(SMTP_FROM, SMTP_FROM_NAME);
+    }
+
+    public function __destruct()
+    {
+        try {
+            $this->mail->smtpClose();
+        } catch (\Throwable $e) {
+            // encerrando: nada a fazer
+        }
+    }
+
+    /** Tentativas realizadas no último envio (para registrar na mensagem de erro). */
+    private int $tentativas = 1;
+
+    /**
+     * Erro "temporário" (vale tentar de novo): falha de conexão, tempo esgotado,
+     * limite de taxa do servidor de e-mail (códigos 4xx) etc. Erros definitivos
+     * (endereço inválido, 5xx de destinatário) NÃO são repetidos.
+     */
+    private static function erroTemporario(string $info): bool
+    {
+        // ATENÇÃO (duplicidade de cobrança): só repete quando é CERTO que a mensagem
+        // NÃO foi aceita pelo servidor. Por isso NÃO se repete em "timeout", "connection
+        // reset/closed" ou "broken pipe" depois do envio dos dados: o servidor pode ter
+        // aceitado a mensagem e só demorado a confirmar — repetir enviaria 2 e-mails.
+        $t = strtolower($info);
+        foreach ([
+            'smtp connect() failed',    // não chegou a conectar: nada foi enviado
+            'could not authenticate',   // falhou no login: nada foi enviado
+        ] as $trecho) {
+            if (strpos($t, $trecho) !== false) {
+                return true;
+            }
+        }
+        // Resposta 4xx = o servidor recusou AGORA e pede para tentar depois (limite de taxa etc.).
+        return preg_match('/(^|[^0-9])4[0-9]{2}[ -]/', $info) === 1;
+    }
+
+    /**
+     * Envia com repetição automática em erro temporário (pausa crescente: 2 s, 4 s...).
+     * Lança a última exceção do PHPMailer se esgotar as tentativas ou o erro for definitivo.
+     */
+    private function enviarComTentativas(): void
+    {
+        $max = defined('ENVIO_TENTATIVAS_SMTP') ? max(1, (int) ENVIO_TENTATIVAS_SMTP) : 3;
+        $this->tentativas = 0;
+        while (true) {
+            $this->tentativas++;
+            try {
+                $this->mail->send();
+                return;
+            } catch (PHPMailerException $e) {
+                if ($this->tentativas >= $max || !self::erroTemporario((string) $this->mail->ErrorInfo)) {
+                    throw $e;
+                }
+                $this->mail->smtpClose(); // força nova conexão na próxima tentativa
+                sleep(2 * $this->tentativas);
+            }
+        }
     }
 
     /**
@@ -105,31 +167,31 @@ class MailSender
         $dir = APP_PATH . '/Resources/assinatura';
 
         $mapa = [
-            'https://exemplo.com.br/assets/imagem.png' => [
-                'arquivo' => $dir . '/gif_logo.gif',
+            'https://exemplo.com.br/assets/logo.gif' => [
+                'arquivo' => $dir . '/logo_empresa.gif',
                 'cid' => 'logo_empresa',
-                'nome' => 'gif_logo.gif',
+                'nome' => 'logo_empresa.gif',
                 'tipo' => 'image/gif',
             ],
-            'https://exemplo.com.br/assets/imagem.png' => [
+            'https://exemplo.com.br/assets/website.png' => [
                 'arquivo' => $dir . '/assinatura_website_novo.png',
                 'cid' => 'ico_website',
                 'nome' => 'assinatura_website_novo.png',
                 'tipo' => 'image/png',
             ],
-            'https://exemplo.com.br/assets/imagem.png' => [
+            'https://exemplo.com.br/assets/instagram.png' => [
                 'arquivo' => $dir . '/assinatura_instragran_novo.png',
                 'cid' => 'ico_instagram',
                 'nome' => 'assinatura_instragran_novo.png',
                 'tipo' => 'image/png',
             ],
-            'https://exemplo.com.br/assets/imagem.png' => [
+            'https://exemplo.com.br/assets/linkedin.png' => [
                 'arquivo' => $dir . '/assinatura_linkedin_novo.png',
                 'cid' => 'ico_linkedin',
                 'nome' => 'assinatura_linkedin_novo.png',
                 'tipo' => 'image/png',
             ],
-            'https://exemplo.com.br/assets/imagem.png' => [
+            'https://exemplo.com.br/assets/banner.png' => [
                 'arquivo' => $dir . '/melhoresturismo.png',
                 'cid' => 'banner_melhoresturismo',
                 'nome' => 'melhoresturismo.png',
@@ -258,11 +320,11 @@ class MailSender
                 }
             }
 
-            $this->mail->send();
+            $this->enviarComTentativas();
 
             return ['ok' => true, 'mensagem' => 'Enviado com sucesso'];
         } catch (PHPMailerException $e) {
-            return ['ok' => false, 'mensagem' => 'Erro no envio: ' . $this->mail->ErrorInfo];
+            return ['ok' => false, 'mensagem' => 'Erro no envio (tentativa ' . $this->tentativas . '): ' . $this->mail->ErrorInfo];
         } catch (\Throwable $e) {
             return ['ok' => false, 'mensagem' => 'Erro inesperado: ' . $e->getMessage()];
         }

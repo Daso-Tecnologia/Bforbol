@@ -173,14 +173,12 @@
                 btn.disabled = true;
                 btn.textContent = 'Reenviando...';
                 try {
-                    const data = await api.post('/api/boletos/reenviar_lote.php', { ids: marcados });
-                    let msg = data.message;
-                    if (data.resultados) {
-                        const falhas = data.resultados.filter(r => !r.ok);
-                        if (falhas.length) {
-                            msg += '\n\nFalhas:\n' + falhas.map(r => '  #' + r.id + ': ' + r.mensagem).join('\n');
-                        }
-                    }
+                    // Em partes (cada chamada < 60 s), com progresso no botão.
+                    const r = await api.reenviarLote(marcados, p => {
+                        btn.textContent = 'Reenviando... ' + p.reenviados + ' ok' + (p.restantes ? ', faltam ' + p.restantes : '');
+                    });
+                    let msg = 'Lote processado: ' + r.reenviados + ' reenviado(s), ' + r.falhas + ' falha(s).';
+                    if (r.detalhesFalhas.length) msg += '\n\nFalhas:\n  ' + r.detalhesFalhas.join('\n  ');
                     alert(msg);
                     carregar();
                 } catch (err) {
@@ -212,8 +210,25 @@
                 btn.disabled = true;
                 btn.textContent = 'Processando...';
                 try {
-                    const data = await api.post('/api/boletos/ler.php', {});
-                    alert(data.message);
+                    const r = await api.lerBoletos(p => {
+                        btn.textContent = 'Processando... ' + p.examinados + ' arquivo(s) lido(s)';
+                    });
+                    // Mesmos avisos que a tela mostrava antes (o motivo de arquivo NÃO virar envio).
+                    let msg = 'Leitura concluída: ' + r.lotes_criados + ' lote(s) de envio criado(s).';
+                    const aviso = (lista, texto) => { if (lista && lista.length) msg += '\n- ' + texto + ': ' + lista.length + ' arquivo(s).'; };
+                    aviso(r.sem_email, 'Sem e-mail principal no cadastro do fornecedor (fila NÃO criada; cadastre o e-mail e leia de novo)');
+                    aviso(r.gate_indisponivel, 'GATE (MSSQL) indisponível (não processados; tente de novo)');
+                    aviso(r.sem_fornecedor, 'Fornecedor não cadastrado (código inexistente no cadastro local e no GATE)');
+                    aviso(r.nao_ativos, 'Fornecedor não ativo');
+                    aviso(r.acima_limite, 'Fornecedor acima do limite de tamanho do e-mail (envio não criado)');
+                    aviso(r.duplicados, 'Duplicados ignorados (já existiam)');
+                    if (r.avisos_cadastro && r.avisos_cadastro.length) {
+                        msg += '\n\nAvisos sobre o cadastro (GATE):\n- ' + r.avisos_cadastro.join('\n- ');
+                    }
+                    const comPendencia = ['sem_email', 'gate_indisponivel', 'sem_fornecedor', 'nao_ativos', 'acima_limite']
+                        .some(k => r[k] && r[k].length > 0);
+                    if (comPendencia) msg += '\n\nVeja o motivo de cada arquivo e o que fazer em: Relatórios > Arquivos aguardando processamento.';
+                    alert(msg);
                     carregar();
                 } catch (err) {
                     alert(err.message);
@@ -228,8 +243,13 @@
                 btn.disabled = true;
                 btn.textContent = 'Enviando...';
                 try {
-                    const data = await api.post('/api/envios/enviar_todos.php', {});
-                    alert(data.message);
+                    // Em partes (cada chamada < 60 s), com progresso no botão.
+                    const r = await api.enviarPendentes(p => {
+                        btn.textContent = 'Enviando... ' + p.enviados + ' enviado(s)' + (p.restantes ? ', faltam ' + p.restantes : '');
+                    });
+                    let msg = 'Fila processada: ' + r.enviados + ' enviado(s), ' + r.falhas + ' falha(s).';
+                    if (r.detalhesFalhas.length) msg += '\n\nFalhas:\n  ' + r.detalhesFalhas.join('\n  ');
+                    alert(msg);
                     carregar();
                 } catch (err) {
                     alert('Falha ao enviar pendentes: ' + err.message);

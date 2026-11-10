@@ -88,7 +88,7 @@ class BoletoReader
     /**
      * Gera o assunto padrão do e-mail conforme o legado.
 
-     * Ex.: "Boleto/Comissão FORNECEDOR EXEMPLO - 0000000002 NF-0000000001"
+     * Ex.: "Boleto/Comissão BVT BOURBON PONTA GROSSA - 0000002206 NF-0000000001"
      */
     public static function montarAssunto(string $fanFor, string $codFor, array $nfs): string
     {
@@ -178,23 +178,45 @@ class BoletoReader
      *   'lotes' => [ ['fornecedor_id' => x,, 'cod_for' => y,, 'arquivos' => [...]], ... ],
      *   'sem_fornecedor' => [ 'arquivo.pdf', ... ],
      *   'nao_ativos' => [ 'arquivo.pdf', ... ],
-     *   'nao_wg_ven' => [ 'arquivo.pdf', ... ],
+     *   'nao_wg_ven' => [] (obsoleto: a wg_ven deixou de ser exigida),
      *   'gate_indisponivel' => [ 'arquivo.pdf', ... ],
      *   'acima_limite' => [ [ 'fornecedor', 'cod_for', 'total_mb', ... ], ... ],
      * ]
      */
-    public static function processarEntrada(): array
+    public static function processarEntrada(?string $aposArquivo = null, float $orcamentoSegundos = 40.0): array
     {
+        $inicio = microtime(true);
         $arquivosEntrada = self::listarArquivosNaEntrada();
         $pdo  = getConnection();
+
+        // Lista ordenada: o cursor ($aposArquivo) pula o que já foi examinado em
+        // chamadas anteriores, para cada chamada HTTP caber abaixo do limite de 60 s
+        // do balanceador/Apache.
+        if ($aposArquivo !== null && $aposArquivo !== '') {
+            $arquivosEntrada = array_values(array_filter(
+                $arquivosEntrada,
+                static fn (string $a): bool => strcmp($a, $aposArquivo) > 0
+            ));
+        }
+
+        $incompleto = false;
+        $ultimoArquivo = $aposArquivo;
+        $examinados = 0;
 
         // Passo 1: agrupar arquivos por código de fornecededor (sem copiar)
         $grupos = [];
         $semFornecedor = [];
-        $naoEncontradosWgVen = [];
         $gateIndisponivel = [];
 
         foreach ($arquivosEntrada as $arquivo) {
+            // Orçamento de tempo: para antes de iniciar outro arquivo (sempre faz ao menos 1).
+            if ($examinados > 0 && (microtime(true) - $inicio) > $orcamentoSegundos) {
+                $incompleto = true;
+                break;
+            }
+            $examinados++;
+            $ultimoArquivo = $arquivo;
+
             $codFor = self::extrairCodFor($arquivo);
 
             if (!$codFor) {
@@ -202,30 +224,9 @@ class BoletoReader
                 continue;
             }
 
-            // Validação (espelho do legado):a chave extraída do nome do arquivo deve
-            // existir na tabela wg_ven do repositório corporativo( GATE. Se não existir,
-            // rejeita o arquivo e NÃO cadastra/nenvia o fornecededor.
-
-
-
-
-            $existeWgVen = mssqlCodForExiste($codFor);
-
-            if ($existeWgVen === null) {
-                // GATE indisponível: não dá para afirmar que o código não existe.
-
-
-                $gateIndisponivel[] = $arquivo;
-
-                continue;
-            }
-
-            if ($existeWgVen === false) {
-                $naoEncontradosWgVen[] = $arquivo;
-
-
-                continue;
-            }
+            // Regra: o upload do boleto é a prova de que a cobrança existe. Não se exige
+            // mais que o código conste na wg_ven (vendas) do GATE. O fornecedor é resolvido
+            // pelo cadastro local e, se não existir, pelo cadastro oficial (wgfor).
 
             $tamanho = is_file(UPLOAD_PATH . '/' . $arquivo) ? (int) filesize(UPLOAD_PATH . '/' . $arquivo) : 0;
 
@@ -239,12 +240,22 @@ class BoletoReader
         $naoAtivos = [];
         $acimaLimite = [];
         $semEmail = [];
+        $duplicados = [];
 
         foreach ($grupos as $grupo) {
             $fornecedor = FornecedorResolver::resolver($grupo['cod_for']);
 
             if (!$fornecedor) {
-                foreach ($grupo['arquivos'] as $a) { $semFornecedor[] = $a; }
+                // Não existe no cadastro local e a busca no GATE (wgfor) não trouxe nada:
+                // distingue "GATE fora do ar" (tentar de novo) de "código desconhecido".
+                $gateFora = FornecedorResolver::gateFalhouNaUltimaBusca();
+                foreach ($grupo['arquivos'] as $a) {
+                    if ($gateFora) {
+                        $gateIndisponivel[] = $a;
+                    } else {
+                        $semFornecedor[] = $a;
+                    }
+                }
                 continue;
             }
 
@@ -320,17 +331,24 @@ class BoletoReader
                     $lotes[$fornecedor['id']]['arquivos_entrada'][] = $arquivo;
                 }
             }
+
+            // Acumula os duplicados de TODOS os grupos (antes só o último grupo era devolvido).
+            $duplicados = array_merge($duplicados, $duplicadosGrupo);
         }
 
         return [
             'lotes'            => array_values($lotes),
             'sem_fornecedor'   => $semFornecedor,
             'nao_ativos'       => $naoAtivos,
-            'nao_wg_ven'       => $naoEncontradosWgVen,
+            'nao_wg_ven'       => [], // mantido vazio por compatibilidade: a wg_ven não barra mais arquivos
             'gate_indisponivel' => $gateIndisponivel,
             'sem_email'        => $semEmail,
             'acima_limite'     => $acimaLimite,
-            'duplicados'       => $duplicadosGrupo ?? [],
+            'duplicados'       => $duplicados,
+            'avisos_cadastro'  => FornecedorResolver::consumirAvisos(),
+            'incompleto'       => $incompleto,
+            'ultimo_arquivo'   => $ultimoArquivo,
+            'examinados'       => $examinados,
         ];
     }
 

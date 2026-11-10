@@ -150,7 +150,10 @@ function mssqlCodForExiste(string $codFor): ?bool
     $tabela = MSSQL_TABELA_VENDA;
 
     try {
-        $sql = "SELECT TOP 1 COD_FOR FROM {$tabela} WHERE COD_FOR = :cod_for";
+        // CAST(... AS VARCHAR): as colunas do GATE são VARCHAR; o padrão do driver (parâmetro
+        // NVARCHAR) faz o SQL Server converter a COLUNA e varrer a tabela inteira (wg_ven tem
+        // milhões de linhas). Mesmo resultado, só que usando o índice. (Visto no projeto Furk.)
+        $sql = "SELECT TOP 1 COD_FOR FROM {$tabela} WHERE COD_FOR = CAST(:cod_for AS VARCHAR(50))";
         $stmt = getMssqlConnection()->prepare($sql);
         $stmt->execute(['cod_for' => $codFor]);
         return $stmt->fetch() !== false;
@@ -182,9 +185,10 @@ function mssqlBuscarFornecedor(string $codFor): ?array
                 COD_FOR,
                 FAN_FOR,
                 RAZ_FOR,
-                EMAIL_FOR
+                EMAIL_FOR,
+                ATIVO
             FROM {$tabela}
-            WHERE COD_FOR = :cod_for";
+            WHERE COD_FOR = CAST(:cod_for AS VARCHAR(50))";
 
     $stmt = getMssqlConnection()->prepare($sql);
     $stmt->execute(['cod_for' => $codFor]);
@@ -199,6 +203,10 @@ function mssqlBuscarFornecedor(string $codFor): ?array
         'fan_for'      => trim($row['FAN_FOR'] ?? ''),
         'raz_for'      => trim($row['RAZ_FOR'] ?? ''),
         'email_for'    => strtolower(trim($row['EMAIL_FOR'] ?? '')),
+        // 1 = ativo no GATE, 0 = inativo, null = não informado. SÓ INFORMATIVO (nunca bloqueia envio).
+        'ativo_gate'   => isset($row['ATIVO']) && $row['ATIVO'] !== ''
+            ? ((is_numeric($row['ATIVO']) ? (int) $row['ATIVO'] : (in_array(strtoupper(trim((string) $row['ATIVO'])), ['N', 'NAO', 'NÃO', 'F', 'FALSE'], true) ? 0 : 1)) === 0 ? 0 : 1)
+            : null,
         'email_for_2'  => '',
         'email_for_3'  => '',
         'email_for_4'  => '',

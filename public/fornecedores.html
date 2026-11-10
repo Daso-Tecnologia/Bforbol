@@ -40,6 +40,12 @@
             <label class="checkbox"><input type="checkbox" id="apenasAtivos" checked> Apenas ativos</label>
             <button class="btn" id="btnExportCsv" type="button" title="Exportar fornecedores para CSV">⬇ CSV</button>
             <button class="btn" id="btnExportXlsx" type="button" title="Exportar fornecedores para Excel">⬇ Excel</button>
+            <button class="btn admin-only" id="btnSincGate" type="button" title="Completa e-mails vazios a partir do GATE e informa diferenças. Nunca sobrescreve o que foi digitado.">🔄 Sincronizar com o GATE</button>
+        </div>
+
+        <div class="panel" id="sincPanel" style="display:none;">
+            <h3>Sincronização com o GATE</h3>
+            <div id="sincResultado"></div>
         </div>
 
         <table class="table" id="tblFornecedores">
@@ -360,6 +366,55 @@ window.editar = async (id) => {
 
             document.getElementById('btnExportCsv').addEventListener('click', () => exportar('csv'));
             document.getElementById('btnExportXlsx').addEventListener('click', () => exportar('xlsx'));
+
+            const escHtml = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+            document.getElementById('btnSincGate').addEventListener('click', async () => {
+                const soSemEmail = confirm(
+                    'Sincronizar com o GATE.\n\n' +
+                    'OK = apenas fornecedores ATIVOS SEM e-mail principal (rápido): completa o e-mail a partir do GATE.\n' +
+                    'Cancelar = escolher a verificação completa.\n\n' +
+                    'Nada que foi digitado manualmente é sobrescrito.'
+                );
+                let escopo = 'sem_email';
+                if (!soSemEmail) {
+                    if (!confirm('Verificação COMPLETA de todos os fornecedores ativos?\n\nCompleta e-mails vazios e informa diferenças entre o cadastro e o GATE (pode levar vários minutos; uma consulta ao GATE por fornecedor). Nada é sobrescrito.')) return;
+                    escopo = 'todos';
+                }
+
+                const btn = document.getElementById('btnSincGate');
+                const painel = document.getElementById('sincPanel');
+                const out = document.getElementById('sincResultado');
+                btn.disabled = true;
+                painel.style.display = 'block';
+                out.innerHTML = '<p class="muted">Sincronizando...</p>';
+                try {
+                    const r = await api.sincronizarGate(escopo, p => {
+                        btn.textContent = 'Sincronizando... ' + p.verificados + ' verificado(s)';
+                    });
+                    const lista = (titulo, itens, fmt, cls) => itens.length === 0 ? '' :
+                        `<p class="${cls}"><strong>${titulo}: ${itens.length}</strong></p><ul class="error-list">${itens.slice(0, 200).map(i => `<li>${fmt(i)}</li>`).join('')}</ul>${itens.length > 200 ? '<p class="muted">(mostrando os 200 primeiros)</p>' : ''}`;
+                    const nome = (i) => `${escHtml(i.cod_for)} — ${escHtml(i.fornecedor)}`;
+                    let html = '';
+                    if (r.gate_indisponivel) {
+                        html += '<p class="error-msg"><strong>O GATE ficou indisponível; a sincronização foi interrompida.</strong> O que já foi feito foi mantido. Tente novamente mais tarde.</p>';
+                    }
+                    html += `<p class="success-msg">${r.verificados} fornecedor(es) verificado(s) (${escopo === 'todos' ? 'todos os ativos' : 'ativos sem e-mail principal'}).</p>`;
+                    html += lista('E-mails completados a partir do GATE', r.completados, i => `${nome(i)}: ${escHtml(i.detalhe)}`, 'success-msg');
+                    html += lista('Sem e-mail também no GATE (cadastre manualmente ou peça para preencher o GATE)', r.gate_sem_email, nome, 'error-msg');
+                    html += lista('E-mail do GATE inválido', r.email_invalido, i => `${nome(i)}: ${escHtml(i.detalhe)}`, 'error-msg');
+                    html += lista('Não encontrados no cadastro do GATE', r.nao_encontrados, nome, 'muted');
+                    html += lista('E-mail do GATE diferente do cadastrado (mantido o cadastro local)', r.divergencias, i => `${nome(i)} — local: ${escHtml(i.local)} | GATE: ${escHtml(i.gate)}`, 'muted');
+                    html += lista('Nome no GATE diferente do cadastrado (nome local mantido)', r.nomes_diferentes, i => `${nome(i)} — GATE: ${escHtml(i.nome_gate)}`, 'muted');
+                    out.innerHTML = html;
+                    carregar();
+                } catch (err) {
+                    out.innerHTML = `<p class="error-msg">${escHtml(err.message)}</p>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Sincronizar com o GATE';
+                }
+            });
 
 document.getElementById('formFornecedor').addEventListener('submit', async (e) => {
                 e.preventDefault();
