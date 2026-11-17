@@ -18,7 +18,7 @@ header('Content-Type: application/json');
 // Garantir tempo suficiente para o envio SMTP (quando o host permite)
 @set_time_limit(60);
 
-validarJWT();
+$usuarioLogado = validarJWT();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -28,13 +28,34 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 
-$email = isset($input['email']) ? mb_strtolower(trim($input['email'])) : '';
+$email = isset($input['email']) ? mb_strtolower(trim((string) $input['email'])) : '';
 
 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
     echo json_encode(['error' => 'Informe um e-mail de destinatário válido']);
     exit;
 }
+
+// Limite por usuário: no máximo 10 e-mails de teste por hora. Esta função está liberada a qualquer
+// usuário autenticado; o limite impede o uso do SMTP corporativo como "relé" de mensagens.
+$limiteTestePorHora = 10;
+$dirRl = STORAGE_PATH . '/rate_limits';
+if (!is_dir($dirRl)) {
+    @mkdir($dirRl, 0775, true);
+}
+$arqRl = $dirRl . '/testar_' . (int) $usuarioLogado['id'] . '.json';
+$agoraRl = time();
+$dadosRl = is_file($arqRl) ? json_decode((string) file_get_contents($arqRl), true) : null;
+$enviosRl = is_array($dadosRl) ? (array) ($dadosRl['t'] ?? []) : [];
+$enviosRl = array_values(array_filter($enviosRl, static fn ($t) => ($agoraRl - (int) $t) < 3600));
+if (count($enviosRl) >= $limiteTestePorHora) {
+    http_response_code(429);
+    header('Retry-After: 3600');
+    echo json_encode(['error' => 'Limite de ' . $limiteTestePorHora . ' e-mails de teste por hora atingido. Tente mais tarde.']);
+    exit;
+}
+$enviosRl[] = $agoraRl;
+@file_put_contents($arqRl, json_encode(['t' => $enviosRl]));
 
 // Gera um PDF fictício válido em memória/arquivo temporário
 $dirTmp = STORAGE_PATH . '/tmp';

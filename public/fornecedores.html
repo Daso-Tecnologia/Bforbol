@@ -136,7 +136,7 @@
         </div>
     </div>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261117"></script>
     <script src="js/main.js"></script>
     <script>
         // Exibir erros de JS na tela (para diagnosticar no host)
@@ -266,10 +266,10 @@ window.editar = async (id) => {
                 } else {
                     tbody.innerHTML = data.data.map(f => `
                         <tr>
-                            <td>${f.cod_for}</td>
-                            <td>${f.fan_for}</td>
-                            <td>${f.raz_for || '-'}</td>
-                            <td>${f.email_for || '-'}</td>
+                            <td>${escHtml(f.cod_for)}</td>
+                            <td>${escHtml(f.fan_for)}</td>
+                            <td>${escHtml(f.raz_for || '-')}</td>
+                            <td>${escHtml(f.email_for || '-')}</td>
                             <td>
                                 ${(f.boletos_pendentes || 0) > 0
                                     ? `<span class="badge badge-pendente">${f.boletos_pendentes} pend.</span>${(f.boletos_enviados || 0) > 0 ? ` <span class="badge badge-enviado">${f.boletos_enviados} env.</span>` : ''}`
@@ -367,7 +367,7 @@ window.editar = async (id) => {
             document.getElementById('btnExportCsv').addEventListener('click', () => exportar('csv'));
             document.getElementById('btnExportXlsx').addEventListener('click', () => exportar('xlsx'));
 
-            const escHtml = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            // escHtml vem de js/api.js (global)
 
             document.getElementById('btnSincGate').addEventListener('click', async () => {
                 const soSemEmail = confirm(

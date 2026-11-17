@@ -55,13 +55,13 @@
         </div>
     </main>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261117"></script>
     <script src="js/main.js"></script>
 <script>
         // Exibir erros de JS na tela (para diagnóstico)
         window.onerror = function (msg, src, line) {
             const el = document.getElementById('resultMsg');
-            if (el) { el.innerHTML = '<p class="error-msg">Erro JS: ' + msg + ' (linha ' + line + ')</p>'; }
+            if (el) { el.innerHTML = '<p class="error-msg">Erro JS: ' + escHtml(msg) + ' (linha ' + escHtml(line) + ')</p>'; }
             return false;
         };
 
@@ -92,7 +92,7 @@
             fileListPanelG.style.display = 'block';
             fileListG.innerHTML = arquivosSelecionados.map((f, i) => `
                 <li>
-                    <span>📄 ${f.name} <small>(${(f.size / 1024).toFixed(1)} KB)</small></span>
+                    <span>📄 ${escHtml(f.name)} <small>(${(f.size / 1024).toFixed(1)} KB)</small></span>
                     <button class="btn btn-small btn-danger" onclick="removerArquivo(${i})">✕</button>
                 </li>
             `).join('');
@@ -170,7 +170,7 @@
                     const cls = aceitos > 0 ? 'success-msg' : 'error-msg';
                     resultMsgG.innerHTML = `<p class="${cls}">Upload concluído: ${aceitos} de ${total} arquivo(s) aceito(s), ${erros.length} aviso(s)/erro(s).</p>`;
                     if (erros.length > 0) {
-                        resultMsgG.innerHTML += `<ul class="error-list">${erros.map(e => `<li>${e}</li>`).join('')}</ul>`;
+                        resultMsgG.innerHTML += `<ul class="error-list">${erros.map(e => `<li>${escHtml(e)}</li>`).join('')}</ul>`;
                     }
                     resultPanelG.style.display = 'block';
                     fileListPanelG.style.display = 'none';
@@ -199,22 +199,22 @@
                     if (data.gate_indisponivel.length > 0) resumo += ` GATE (MSSQL) indisponível: ${data.gate_indisponivel.length} arquivo(s) não processado(s).`;
                     resultMsgG.innerHTML = `<p class="success-msg">${resumo}</p>`;
                     if (data.acima_limite && data.acima_limite.length > 0) {
-                        resultMsgG.innerHTML += `<p class="error-msg"><strong>Fornecedores excedendo o limite de ${data.acima_limite[0].limite_mb} MB:</strong></p><ul class="error-list">${data.acima_limite.map(a => `<li>${a.fornecedor} (${a.cod_for}) — total ${a.total_mb} MB em ${a.total_arquivos} arquivo(s) — envio não criado</li>`).join('')}</ul>`;
+                        resultMsgG.innerHTML += `<p class="error-msg"><strong>Fornecedores excedendo o limite de ${data.acima_limite[0].limite_mb} MB:</strong></p><ul class="error-list">${data.acima_limite.map(a => `<li>${escHtml(a.fornecedor)} (${escHtml(a.cod_for)}) — total ${a.total_mb} MB em ${a.total_arquivos} arquivo(s) — envio não criado</li>`).join('')}</ul>`;
                     }
                     if (data.gate_indisponivel && data.gate_indisponivel.length > 0) {
-                        resultMsgG.innerHTML += `<p class="error-msg">GATE (MSSQL) indisponível — arquivos não processados: ${data.gate_indisponivel.join(', ')}</p>`;
+                        resultMsgG.innerHTML += `<p class="error-msg">GATE (MSSQL) indisponível — arquivos não processados: ${escHtml(data.gate_indisponivel.join(', '))}</p>`;
                     }
                     if (data.sem_email && data.sem_email.length > 0) {
-                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedores sem e-mail principal — filas NÃO criadas. Cadastre o e-mail no fornecedor e execute "Ler boletos" novamente: ${data.sem_email.join(', ')}</p>`;
+                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedores sem e-mail principal — filas NÃO criadas. Cadastre o e-mail no fornecedor e execute "Ler boletos" novamente: ${escHtml(data.sem_email.join(', '))}</p>`;
                     }
                     if (data.sem_fornecedor && data.sem_fornecedor.length > 0) {
-                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedor não cadastrado (o código não existe no cadastro local nem no cadastro do GATE). Confira o código ou cadastre o fornecedor manualmente e execute "Ler boletos" novamente: ${data.sem_fornecedor.join(', ')}</p>`;
+                        resultMsgG.innerHTML += `<p class="error-msg">Fornecedor não cadastrado (o código não existe no cadastro local nem no cadastro do GATE). Confira o código ou cadastre o fornecedor manualmente e execute "Ler boletos" novamente: ${escHtml(data.sem_fornecedor.join(', '))}</p>`;
                     }
                     if (data.nao_ativos && data.nao_ativos.length > 0) {
-                        resultMsgG.innerHTML += `<p class="muted">Não ativos: ${data.nao_ativos.join(', ')}</p>`;
+                        resultMsgG.innerHTML += `<p class="muted">Não ativos: ${escHtml(data.nao_ativos.join(', '))}</p>`;
                     }
                     if (data.avisos_cadastro && data.avisos_cadastro.length > 0) {
-                        resultMsgG.innerHTML += `<p class="muted"><strong>Avisos sobre o cadastro dos fornecedores (GATE):</strong></p><ul class="error-list">${data.avisos_cadastro.map(a => `<li>${a.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</li>`).join('')}</ul>`;
+                        resultMsgG.innerHTML += `<p class="muted"><strong>Avisos sobre o cadastro dos fornecedores (GATE):</strong></p><ul class="error-list">${data.avisos_cadastro.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul>`;
                     }
                     const comPendencia = ['sem_email', 'gate_indisponivel', 'sem_fornecedor', 'nao_ativos', 'acima_limite']
                         .some(k => data[k] && data[k].length > 0);
@@ -224,7 +224,7 @@
                         setTimeout(() => window.location.href = 'envios.html', 2500);
                     }
                 } catch (err) {
-                    resultMsgG.innerHTML = `<p class="error-msg">${err.message}</p>`;
+                    resultMsgG.innerHTML = `<p class="error-msg">${escHtml(err.message)}</p>`;
                 } finally {
                     btn.disabled = false;
                     btn.textContent = 'Processar (Ler boletos)';

@@ -98,7 +98,7 @@
         </div>
     </div>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261117"></script>
     <script src="js/main.js"></script>
     <script>
         const modalUsuario = document.getElementById('modalUsuario');
@@ -201,8 +201,8 @@
 
                 tbody.innerHTML = usuarios.map(u => `
                     <tr>
-                        <td>${u.nome}</td>
-                        <td>${u.email}</td>
+                        <td>${escHtml(u.nome)}</td>
+                        <td>${escHtml(u.email)}</td>
                         <td>${u.nivel === 'completo' ? '<span class="badge badge-enviado">Admin</span>' : '<span class="badge">Leitura</span>'}</td>
                         <td>${u.ativo ? '<span class="badge badge-enviado">Sim</span>' : '<span class="badge badge-erro">Não</span>'}</td>
                         <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '-'}</td>
@@ -213,7 +213,7 @@
                     </tr>
                 `).join('');
             } catch (err) {
-                tbody.innerHTML = '<tr><td colspan="6">' + (err.message || err) + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6">' + escHtml(err.message || err) + '</td></tr>';
             }
         }
         window.carregar = carregar;

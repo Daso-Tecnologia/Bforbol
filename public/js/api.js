@@ -213,3 +213,13 @@ const api = (() => {
 })();
 
 window.api = api;
+
+/**
+ * Escapa texto para inserir com segurança dentro de innerHTML (evita XSS).
+ * Use em TODO dado vindo do servidor/usuário: nomes, e-mails, assuntos, mensagens, arquivos.
+ */
+window.escHtml = function (t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+};

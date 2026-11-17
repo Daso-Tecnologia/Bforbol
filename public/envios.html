@@ -78,7 +78,7 @@
         <div class="pagination" id="paginacao"></div>
     </main>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261117"></script>
     <script src="js/main.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -119,12 +119,12 @@
                             </td>
                             <td>${e.id}</td>
                             <td>${new Date(e.data_tentativa || e.created_at).toLocaleString('pt-BR')}</td>
-                            <td>${e.cod_for || '-'}</td>
-                            <td>${e.fan_for || '-'}</td>
-                            <td>${e.destino || '-'}</td>
-                            <td class="col-assunto">${e.assunto || '-'}</td>
-                            <td><span class="badge badge-${e.estado}">${e.estado}</span></td>
-                            <td class="col-msg">${e.mensagem_erro || '-'}</td>
+                            <td>${escHtml(e.cod_for || '-')}</td>
+                            <td>${escHtml(e.fan_for || '-')}</td>
+                            <td>${escHtml(e.destino || '-')}</td>
+                            <td class="col-assunto">${escHtml(e.assunto || '-')}</td>
+                            <td><span class="badge badge-${escHtml(e.estado)}">${escHtml(e.estado)}</span></td>
+                            <td class="col-msg">${escHtml(e.mensagem_erro || '-')}</td>
                             <td>
                                 ${e.estado === 'erro' ? `<button class="btn btn-small btn-warning" onclick="reenviar(${e.id})">Reenviar</button>` : ''}
                             </td>

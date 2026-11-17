@@ -75,7 +75,7 @@
         </div>
     </main>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=20261117"></script>
     <script src="js/main.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
@@ -126,10 +126,10 @@
                     tbody.innerHTML = recentes.data.map(e => `
                         <tr>
                             <td>${new Date(e.data_tentativa || e.created_at).toLocaleString('pt-BR')}</td>
-                            <td>${e.cod_for || '-'}</td>
-                            <td>${e.fan_for || '-'}</td>
-                            <td>${e.destino || '-'}</td>
-                            <td><span class="badge badge-${e.estado}">${e.estado}</span></td>
+                            <td>${escHtml(e.cod_for || '-')}</td>
+                            <td>${escHtml(e.fan_for || '-')}</td>
+                            <td>${escHtml(e.destino || '-')}</td>
+                            <td><span class="badge badge-${escHtml(e.estado)}">${escHtml(e.estado)}</span></td>
                         </tr>
                     `).join('');
                 }

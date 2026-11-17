@@ -53,6 +53,7 @@ $sucesso = 0;
 $erros = [];
 
 foreach ($arquivos as $arquivo) {
+    // Nome só com a parte final (sem diretórios, por segurança; "/" e "\" removidos).
     $nome = basename(str_replace('\\', '/', (string) ($arquivo['name'] ?? '')));
 
     // Validar extensão conforme ALLOWED_EXTENSIONS (config .env)
@@ -75,15 +76,20 @@ foreach ($arquivos as $arquivo) {
         continue;
     }
 
-    // Validar conteúdo real: o arquivo deve ser um PDF (assinatura "%PDF-")
-    $fh = ($arquivo['tmp_name'] ?? '') !== '' ? @fopen($arquivo['tmp_name'], 'rb') : false;
-    $magic = $fh ? fread($fh, 5) : '';
-    if ($fh) {
-        fclose($fh);
-    }
-    if ($magic !== '%PDF-') {
-        $erros[] = "{$nome}: conteúdo inválido (não é um PDF)";
-        continue;
+    // Validar o CONTEÚDO real: arquivo ".pdf" precisa conter a assinatura "%PDF-" no início
+    // (a especificação admite alguns bytes antes; procuramos nos primeiros 1024 bytes).
+    // Não basta confiar na extensão do nome enviado pelo cliente.
+    if ($ext === 'pdf') {
+        $tmpArq = (string) ($arquivo['tmp_name'] ?? '');
+        $fh = ($tmpArq !== '' && is_uploaded_file($tmpArq)) ? @fopen($tmpArq, 'rb') : false;
+        $inicio = $fh ? (string) fread($fh, 1024) : '';
+        if ($fh) {
+            fclose($fh);
+        }
+        if (strpos($inicio, '%PDF-') === false) {
+            $erros[] = "{$nome}: conteúdo inválido (não é um PDF)";
+            continue;
+        }
     }
 
     // Validar regra do legado: extrair COD_FOR (posição 7-16)
