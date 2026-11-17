@@ -2,12 +2,7 @@
 /**
  * api/auth/login.php
  * Endpoint de autenticação - gera JWT.
- * Aceita e-mail corporativo + senha (tela de login) OU token da ABSTRA (SSO corporativo).
- * 
- * - Para relatórios PDF/XLSX, instale as bibliotecas:
-  ```bash
-  composer require tecnickcom/tcpdf phpoffice/phpspreadsheet
-  ```
+ * Aceita somente e-mail corporativo + senha.
  */
 
 declare(strict_types=1);
@@ -48,22 +43,17 @@ $loginData['requests'][] = $now;
 // Receber dados (JSON)
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 
-// Modo 1: Login por e-mail corporativo + senha (tela de login)
-$email = isset($input['email']) ? mb_strtolower(trim($input['email'])) : '';
+// Login por e-mail corporativo + senha (único modo suportado).
+$email = isset($input['email']) ? mb_strtolower(trim((string) $input['email'])) : '';
 $senha = isset($input['senha']) ? (string) $input['senha'] : '';
 
-// Modo 2: Token corporativo ABSTRA (SSO) - envio do e-mail autenticado
-$tokenAbstra = isset($input['abstra_token']) ? (string) $input['abstra_token'] : '';
-$emailAbstra = isset($input['abstra_email']) ? mb_strtolower(trim($input['abstra_email'])) : '';
-
-// Requer e-mail em ambos os modos
-if ($email === '' && $emailAbstra === '') {
+if ($email === '') {
     http_response_code(400);
     echo json_encode(['error' => 'E-mail é obrigatório']);
     exit;
 }
 
-$emailFinal = $email !== '' ? $email : $emailAbstra;
+$emailFinal = $email;
 
 // Verificar bloqueio por brute force
 if (!checkLoginAttempt($emailFinal)) {
@@ -79,7 +69,7 @@ $stmt->execute(['email' => $emailFinal]);
 $usuario = $stmt->fetch();
 
 if (!$usuario) {
-    // Usuário não existe no MySQL. Opção: permitir acesso corporativo ABSTRA se validado.
+    // Usuário não existe no MySQL.
     // Aqui, para o login por senha, negamos.
     recordLoginFailure($emailFinal);
     http_response_code(401);
@@ -93,19 +83,8 @@ if ((int) ($usuario['ativo'] ?? 1) !== 1) {
     exit;
 }
 
-// Autenticar conforme o modo
-$autenticado = false;
-
-if ($tokenAbstra !== '') {
-    // Modo ABSTRA: validar token corporativo (placeholder - integrar API da ABSTRA)
-    // Em produção: chamar endpoint ABSTRA para validar o token e obter e-mail oficial.
-    if (substr($tokenAbstra, 0, 7) === 'ABSTRA_') {
-        $autenticado = true;
-    }
-} elseif ($senha !== '') {
-    // Modo senha: verificar hash bcrypt
-    $autenticado = password_verify($senha, $usuario['senha'] ?? '');
-}
+// Autenticar: somente senha (hash bcrypt). Senha vazia nunca autentica.
+$autenticado = $senha !== '' && password_verify($senha, (string) ($usuario['senha'] ?? ''));
 
 if (!$autenticado) {
     recordLoginFailure($emailFinal);
