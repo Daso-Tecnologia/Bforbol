@@ -9,16 +9,21 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/security.php';
+require_once __DIR__ . '/../../config/database.php';
 
 // Qualquer fatal em um endpoint de API deve retornar JSON (nunca corpo vazio).
+// O detalhe técnico (caminhos, classes, SQL) NÃO vai ao cliente: fica no log, com uma referência
+// curta que o usuário pode informar ao suporte para localizar a linha no log de erros do PHP/Apache.
 register_shutdown_function(function () {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        $ref = substr(bin2hex(random_bytes(4)), 0, 8);
+        error_log('[api-fatal ' . $ref . '] ' . ($error['message'] ?? '') . ' em ' . ($error['file'] ?? '?') . ':' . ($error['line'] ?? '?'));
         if (!headers_sent()) {
             header('Content-Type: application/json');
             http_response_code(500);
         }
-        echo json_encode(['error' => 'Erro interno do servidor: ' . ($error['message'] ?? '')]);
+        echo json_encode(['error' => 'Erro interno do servidor (ref ' . $ref . ')']);
     }
 });
 
@@ -37,10 +42,7 @@ function extrairToken(): ?string
         return $_SERVER['HTTP_AUTHORIZATION'];
     }
 
-    // 3. Query parameter _token (fallback)
-    if (!empty($_GET['_token'])) {
-        return $_GET['_token'];
-    }
+    // (O token NUNCA é aceito pela URL: iria parar em logs e no cabeçalho Referer.)
 
     // 4. Redirect Authorization (Apache)
     if (!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
@@ -92,11 +94,26 @@ function validarJWT(): array
         exit;
     }
 
+    // Reconfirma o usuário NO BANCO a cada requisição: quem foi desativado ou teve o nível
+    // alterado perde/ajusta o acesso na hora (e não só quando o token expira). Os dados
+    // (nível, nome, e-mail) valem os do banco, nunca os que estão dentro do token.
+    $id = (int) ($payload['id'] ?? 0);
+    $stmt = getConnection()->prepare('SELECT id, nome, email, nivel, ativo FROM usuarios WHERE id = :id LIMIT 1');
+    $stmt->execute(['id' => $id]);
+    $u = $stmt->fetch();
+
+    if (!$u || (int) ($u['ativo'] ?? 1) !== 1) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Sessão inválida. Faça login novamente.']);
+        exit;
+    }
+
     return [
-        'id'    => (int) ($payload['id'] ?? 0),
-        'email' => (string) ($payload['email'] ?? ''),
-        'nome'  => (string) ($payload['nome'] ?? ''),
-        'nivel' => (string) ($payload['nivel'] ?? 'read'),
+        'id'    => (int) $u['id'],
+        'email' => (string) $u['email'],
+        'nome'  => (string) $u['nome'],
+        'nivel' => (string) ($u['nivel'] ?? 'read'),
     ];
 }
 
