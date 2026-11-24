@@ -88,7 +88,7 @@ class BoletoReader
     /**
      * Gera o assunto padrão do e-mail conforme o legado.
 
-     * Ex.: "Boleto/Comissão BVT BOURBON PONTA GROSSA - 0000002206 NF-0000000001"
+     * Ex.: "Boleto/Comissão FORNECEDOR EXEMPLO - 0000000002 NF-0000000001"
      */
     public static function montarAssunto(string $fanFor, string $codFor, array $nfs): string
     {
