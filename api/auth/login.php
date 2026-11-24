@@ -11,6 +11,8 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/security.php';
 
+applyApiHeaders();
+
 header('Content-Type: application/json');
 
 // Apenas POST
@@ -44,8 +46,8 @@ $loginData['requests'][] = $now;
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 
 // Login por e-mail corporativo + senha (único modo suportado).
-$email = isset($input['email']) ? mb_strtolower(trim((string) $input['email'])) : '';
-$senha = isset($input['senha']) ? (string) $input['senha'] : '';
+$email = isset($input['email']) && is_string($input['email']) ? mb_strtolower(trim($input['email'])) : '';
+$senha = isset($input['senha']) && is_string($input['senha']) ? $input['senha'] : '';
 
 if ($email === '') {
     http_response_code(400);

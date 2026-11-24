@@ -18,7 +18,10 @@ header('Content-Type: application/json');
 // Garantir tempo suficiente para o envio SMTP (quando o host permite)
 @set_time_limit(60);
 
-$usuarioLogado = validarJWT();
+// Somente administrador (nível "completo"): o e-mail de teste usa o SMTP corporativo.
+$usuarioLogado = validarJWTCompleto();
+// No máximo 5 e-mails de teste por minuto por IP (além do limite por usuário, mais abaixo).
+rateLimit(5, 'email_teste');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -28,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $input = json_decode(file_get_contents('php://input'), true) ?: [];
 
-$email = isset($input['email']) ? mb_strtolower(trim((string) $input['email'])) : '';
+$email = isset($input['email']) && is_string($input['email']) ? mb_strtolower(trim($input['email'])) : '';
 
 if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);

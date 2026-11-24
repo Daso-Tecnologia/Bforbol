@@ -21,6 +21,25 @@ function applySecurityHeaders(): void
 }
 
 /**
+ * Cabeçalhos das respostas de API: sem cache (dados de fornecedores e usuários não devem
+ * ficar guardados em cache de navegador/proxy).
+ *
+ * Neste servidor os cabeçalhos de SEGURANÇA (X-Frame-Options, nosniff, Referrer-Policy,
+ * Permissions-Policy, HSTS) já vêm do Apache (.htaccess do servidor, 17/11/2026). Repeti-los
+ * aqui os DUPLICARIA (Apache `Header always set` + PHP `header()`), e um X-Frame-Options
+ * duplicado pode ser ignorado pelo navegador. Por isso, por padrão, só envia o anti-cache.
+ * Em um ambiente SEM esses cabeçalhos no servidor web, chame applyApiHeaders(true).
+ */
+function applyApiHeaders(bool $comCabecalhosDeSeguranca = false): void
+{
+    if ($comCabecalhosDeSeguranca) {
+        applySecurityHeaders();
+    }
+    header('Cache-Control: no-store');
+    header('Pragma: no-cache');
+}
+
+/**
  * Rate limit por IP usando arquivos em storage/rate_limits.
  * Permite N requisições por minuto.
  */
