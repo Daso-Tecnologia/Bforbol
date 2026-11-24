@@ -53,6 +53,21 @@ foreach (['email_for_2', 'email_for_3', 'email_for_4', 'email_for_5', 'email_for
     }
 }
 
+// Tamanho máximo das colunas (database/schema.sql): responde 400 claro em vez de erro 500 do banco.
+// Conferido DEPOIS da conversão para maiúsculas (mb_strtoupper pode aumentar o texto).
+if (mb_strlen($fanFor) > 50 || mb_strlen($razFor) > 50) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Nome fantasia e razão social aceitam no máximo 50 caracteres']);
+    exit;
+}
+foreach ($emails as $campo => $valor) {
+    if (mb_strlen($valor) > 100) {
+        http_response_code(400);
+        echo json_encode(['error' => "O campo {$campo} aceita no máximo 100 caracteres"]);
+        exit;
+    }
+}
+
 $ativo = isset($input['ativo']) ? (int) (bool) $input['ativo'] : 1;
 
 $pdo = getConnection();
@@ -76,6 +91,11 @@ if ($stmt->fetch()) {
 }
 
 $dirBol = BOLETO_PATH . '/' . preg_replace('/[^A-Za-z0-9 _.-]/', '', $fanFor) . '-' . $codFor;
+if (strlen($dirBol) > 255) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Nome muito longo para a pasta do fornecedor']);
+    exit;
+}
 
 if (!empty($input['id'])) {
     $sql = "UPDATE fornecedores SET

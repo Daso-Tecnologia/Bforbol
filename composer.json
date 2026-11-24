@@ -6,7 +6,6 @@
     "require": {
         "php": ">=8.1",
         "phpmailer/phpmailer": "^6.9",
-        "firebase/php-jwt": "^6.10",
         "ext-pdo": "*",
         "ext-json": "*",
         "ext-fileinfo": "*"
@@ -22,11 +21,6 @@
     },
     "config": {
         "optimize-autoloader": true,
-        "preferred-install": "dist",
-        "policy": {
-            "advisories": {
-                "ignore-id": ["PKSA-y2cr-5h3j-g3ys"]
-            }
-        }
+        "preferred-install": "dist"
     }
 }

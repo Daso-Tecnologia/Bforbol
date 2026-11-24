@@ -252,7 +252,7 @@ Todas as rotas retornam JSON e, exceto o login, exigem `Authorization: Bearer <J
 | **Envios** | `envios/enviar_todos`, `listar`, `relatorio`, `limpiar` | Envio da fila, consulta, relatórios e limpeza da fila (erros, pendentes ou reinício completo; o histórico de enviados é sempre preservado) |
 | **Fornecedores** | `fornecedores/listar`, `salvar`, `excluir`, `exportar`, `sincronizar_gate` | Cadastro (até 6 e-mails), busca paginada, exportação e sincronização (somente administrador) que completa e-mails vazios a partir do ERP e lista divergências |
 | **Usuários** | `usuarios/listar`, `salvar`, `excluir` | Gestão de acessos |
-| **Configuração** | `configuracao/listar`, `salvar`, `smtp_listar`, `smtp_salvar`, `email/testar` | Parâmetros do sistema, SMTP e e-mail de teste |
+| **Configuração** | `configuracao/listar`, `salvar`, `smtp_listar`, `smtp_salvar`, `email/testar` | Parâmetros do sistema, SMTP e e-mail de teste (somente administrador) |
 
 **Perfis de acesso**
 

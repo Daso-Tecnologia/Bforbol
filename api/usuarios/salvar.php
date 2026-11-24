@@ -32,6 +32,11 @@ if (empty($input['nome'])) {
 }
 
 $nome = trim($input['nome']);
+if (mb_strlen($nome) > 100) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Nome aceita no máximo 100 caracteres']);
+    exit;
+}
 $pdo = getConnection();
 
 // ---------- Criação (novo registro) ----------
@@ -53,6 +58,11 @@ if (empty($input['id'])) {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         http_response_code(400);
         echo json_encode(['error' => 'E-mail inválido']);
+        exit;
+    }
+    if (mb_strlen($email) > 100) {
+        http_response_code(400);
+        echo json_encode(['error' => 'E-mail aceita no máximo 100 caracteres']);
         exit;
     }
 
@@ -142,6 +152,11 @@ if (!$ehAdmin) {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         http_response_code(400);
         echo json_encode(['error' => 'E-mail inválido']);
+        exit;
+    }
+    if (mb_strlen($email) > 100) {
+        http_response_code(400);
+        echo json_encode(['error' => 'E-mail aceita no máximo 100 caracteres']);
         exit;
     }
 

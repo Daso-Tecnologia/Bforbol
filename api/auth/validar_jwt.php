@@ -11,6 +11,9 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../config/security.php';
 require_once __DIR__ . '/../../config/database.php';
 
+// Respostas de API nunca ficam em cache (todas as rotas incluem este arquivo).
+applyApiHeaders();
+
 // Qualquer fatal em um endpoint de API deve retornar JSON (nunca corpo vazio).
 // O detalhe técnico (caminhos, classes, SQL) NÃO vai ao cliente: fica no log, com uma referência
 // curta que o usuário pode informar ao suporte para localizar a linha no log de erros do PHP/Apache.
